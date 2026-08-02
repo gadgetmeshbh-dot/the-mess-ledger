@@ -208,6 +208,23 @@ tr:last-child td{border-bottom:none;}
 }
 
 .info-note{background:var(--brass-tint);border:1px solid var(--brass);color:#6B4E17;border-radius:8px;padding:12px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.5;}
+
+/* ============ SPLIT EDITOR ============ */
+.split-row-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.split-toggle-link{background:none;border:none;color:var(--emerald-dark);font-size:12px;font-weight:600;padding:0;text-decoration:underline;}
+.split-check-group{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;}
+.split-check{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;}
+.split-check input{width:15px;height:15px;accent-color:var(--emerald);}
+.split-editor{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px;margin-bottom:14px;}
+.split-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.split-row:last-child{margin-bottom:0;}
+.split-amount-input{width:120px;text-align:right;font-family:'IBM Plex Mono',monospace;}
+.split-editor-total{margin-top:10px;font-size:12.5px;font-weight:600;text-align:right;}
+.split-editor-actions{margin-top:10px;text-align:right;}
+.split-reset-btn{background:none;border:1px solid var(--rule);border-radius:6px;padding:5px 10px;font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+.split-reset-btn:hover{border-color:var(--ink);color:var(--ink);}
+.tag-badge{font-size:11px;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:600;display:inline-block;background:var(--vishnu-tint);color:var(--vishnu);}
+.tag-badge.split{background:var(--brass-tint);color:#6B4E17;}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:9px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow);z-index:200;display:none;}
 .toast.show{display:block;animation:fade .2s ease;}
 .conn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
@@ -270,6 +287,7 @@ tr:last-child td{border-bottom:none;}
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent</div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
+        <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu Spent</div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
         <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
       </div>
 
@@ -280,9 +298,21 @@ tr:last-child td{border-bottom:none;}
           <div class="person-toggle" style="margin-bottom:14px;">
             <button type="button" class="person-btn sel-irshad" id="pickIrshad" onclick="setPayer('irshad')"><span class="dot"></span>Irshad</button>
             <button type="button" class="person-btn" id="pickAzad" onclick="setPayer('azad')"><span class="dot"></span>Azad</button>
+            <button type="button" class="person-btn" id="pickVishnu" onclick="setPayer('vishnu')"><span class="dot"></span>Vishnu</button>
           </div>
+
+          <div class="split-row-head">
+            <label style="margin:0;">Split between</label>
+            <button type="button" class="split-toggle-link" id="splitCustomizeBtn" onclick="toggleSplitEditor()">Customize amounts</button>
+          </div>
+          <div class="split-check-group">
+            <label class="split-check"><input type="checkbox" id="splitIrshad" checked onchange="onParticipantsChange()"> Irshad</label>
+            <label class="split-check"><input type="checkbox" id="splitAzad" checked onchange="onParticipantsChange()"> Azad</label>
+            <label class="split-check"><input type="checkbox" id="splitVishnu" onchange="onParticipantsChange()"> Vishnu</label>
+          </div>
+
           <div class="form-row three">
-            <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="expAmount" placeholder="0.000"></div>
+            <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="expAmount" placeholder="0.000" oninput="onAmountChange()"></div>
             <div><label>Date</label><input type="date" id="expDate"></div>
             <div><label>Category</label>
               <select id="expCategory">
@@ -291,9 +321,17 @@ tr:last-child td{border-bottom:none;}
               </select>
             </div>
           </div>
+
+          <div class="split-editor" id="splitEditorWrap" style="display:none;">
+            <div id="splitEditorRows"></div>
+            <div class="split-editor-total" id="splitEditorTotal"></div>
+            <div class="split-editor-actions"><button type="button" class="split-reset-btn" onclick="resetSplitEqual()">↺ Reset to equal split</button></div>
+          </div>
+
           <div class="form-row" style="grid-template-columns:1fr;">
             <div><label>Description</label><input type="text" id="expDesc" placeholder="e.g. Lulu grocery run — rice, oil, veggies"></div>
           </div>
+          <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 12px;" id="splitHint">Split evenly between Irshad and Azad by default. Tick Vishnu to include him — the total then splits three ways, and you can fine-tune each person's share below.</p>
           <button class="btn btn-primary" id="addExpenseBtn">＋ Add Expense</button>
         </div>
       </div>
@@ -476,8 +514,14 @@ let liveVishnu = [];
 let cycleHistoryCache = [];
 let vishnuHistoryCache = [];
 
+// Split-editor state for the Add Expense form
+let splitEditorOpen = false;
+let splitManual = {};   // {person:true} once the person's amount has been hand-edited
+let splitValues = {irshad:0, azad:0};
+
 const CURRENCY = 'BHD';
 const fmt = (n) => `${CURRENCY} ${(Number(n)||0).toFixed(3)}`;
+const personLabel = (p) => p==='irshad'?'Irshad':p==='azad'?'Azad':'Vishnu';
 
 /* ---------------- Cycle helpers ---------------- */
 function cycleKeyFor(d = new Date()){
@@ -561,6 +605,59 @@ function attachListeners(){
     }, err=> console.error(err));
 }
 
+/* ---------------- Split-aware balance math ---------------- */
+// Handles legacy docs (no splitWith/splitAmounts saved) by treating them
+// as an even Irshad/Azad split, exactly like the original behaviour.
+function expenseSplitInfo(e){
+  const amount = Number(e.amount) || 0;
+  if(e.splitWith && e.splitAmounts){
+    return {participants: e.splitWith, splitAmounts: e.splitAmounts, payer: e.person};
+  }
+  return {participants:['irshad','azad'], splitAmounts:{irshad: amount/2, azad: amount/2}, payer: e.person};
+}
+
+// net[person] > 0  -> person is owed money (they fronted more than their share)
+// net[person] < 0  -> person owes money (their share exceeds what they paid)
+function computeNetBalances(list){
+  const net = {irshad:0, azad:0, vishnu:0};
+  const spent = {irshad:0, azad:0, vishnu:0};
+  const shareOwed = {irshad:0, azad:0, vishnu:0};
+  list.forEach(e=>{
+    const {participants, splitAmounts, payer} = expenseSplitInfo(e);
+    const amount = Number(e.amount) || 0;
+    spent[payer] = (spent[payer]||0) + amount;
+    net[payer] = (net[payer]||0) + amount;
+    participants.forEach(p=>{
+      const share = Number(splitAmounts[p]) || 0;
+      shareOwed[p] = (shareOwed[p]||0) + share;
+      net[p] = (net[p]||0) - share;
+    });
+  });
+  return {net, spent, shareOwed};
+}
+
+// Greedy debt simplification — turns a 3-way net balance into the
+// fewest possible "X pays Y" transfers.
+function simplifyDebts(net){
+  const creditors = [], debtors = [];
+  Object.entries(net).forEach(([p,v])=>{
+    if(v > 0.0005) creditors.push({p, v});
+    else if(v < -0.0005) debtors.push({p, v:-v});
+  });
+  creditors.sort((a,b)=>b.v-a.v);
+  debtors.sort((a,b)=>b.v-a.v);
+  const txns = [];
+  let i=0, j=0;
+  while(i<debtors.length && j<creditors.length){
+    const pay = Math.min(debtors[i].v, creditors[j].v);
+    if(pay > 0.0005) txns.push({from: debtors[i].p, to: creditors[j].p, amount: +pay.toFixed(3)});
+    debtors[i].v -= pay; creditors[j].v -= pay;
+    if(debtors[i].v <= 0.0005) i++;
+    if(creditors[j].v <= 0.0005) j++;
+  }
+  return txns;
+}
+
 /* ---------------- Dashboard ---------------- */
 function renderDashboard(){
   const {start,end} = cycleRangeFor(CURRENT_CYCLE);
@@ -569,35 +666,39 @@ function renderDashboard(){
   const daysLeft = Math.max(0, Math.ceil((end - today)/86400000)+1);
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
-  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-
-  const total = irshadTotal + azadTotal;
+  const {net, spent} = computeNetBalances(liveExpenses);
+  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
 
   document.getElementById('wTotal').textContent = fmt(total);
-  document.getElementById('wIrshad').textContent = fmt(irshadTotal);
-  document.getElementById('wAzad').textContent = fmt(azadTotal);
+  document.getElementById('wIrshad').textContent = fmt(spent.irshad);
+  document.getElementById('wAzad').textContent = fmt(spent.azad);
   document.getElementById('wIrshadCount').textContent = `${liveExpenses.filter(e=>e.person==='irshad').length} entries`;
   document.getElementById('wAzadCount').textContent = `${liveExpenses.filter(e=>e.person==='azad').length} entries`;
   document.getElementById('entryCount').textContent = `${liveExpenses.length} entries`;
 
-  const half = total/2;
-  const diff = irshadTotal - half;
+  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
+  document.getElementById('wVishnuWidget').style.display = vishnuInvolved ? '' : 'none';
+  if(vishnuInvolved){
+    document.getElementById('wVishnu').textContent = fmt(spent.vishnu);
+    document.getElementById('wVishnuCount').textContent = `${liveExpenses.filter(e=>e.person==='vishnu').length} entries`;
+  }
+
   const card = document.getElementById('wBalanceCard');
   const valEl = document.getElementById('wBalance');
   const subEl = document.getElementById('wBalanceSub');
-  if(total === 0 || Math.abs(diff) < 0.0005){
+  const txns = simplifyDebts(net);
+  if(total === 0 || txns.length === 0){
     card.className = 'widget balance settled';
     valEl.textContent = 'Settled';
-    subEl.textContent = total===0 ? 'No expenses logged yet' : 'Equal contribution so far';
-  } else if(diff > 0){
+    subEl.textContent = total===0 ? 'No expenses logged yet' : 'Everyone paid their share';
+  } else if(txns.length === 1){
     card.className = 'widget balance owed';
-    valEl.textContent = fmt(diff);
-    subEl.textContent = 'Azad owes Irshad';
+    valEl.textContent = fmt(txns[0].amount);
+    subEl.textContent = `${personLabel(txns[0].from)} owes ${personLabel(txns[0].to)}`;
   } else {
     card.className = 'widget balance owed';
-    valEl.textContent = fmt(-diff);
-    subEl.textContent = 'Irshad owes Azad';
+    valEl.textContent = `${txns.length} transfers`;
+    subEl.textContent = txns.map(t=>`${personLabel(t.from)}→${personLabel(t.to)} ${fmt(t.amount)}`).join(', ');
   }
 
   renderExpenseTable();
@@ -612,20 +713,23 @@ function renderExpenseTable(){
   let rows = liveExpenses.map(e=>{
     const isMarkedByVishnu = e.description && e.description.includes('[Marked by Vishnu]');
     const cleanDesc = isMarkedByVishnu ? e.description.replace('[Marked by Vishnu]', '').trim() : (e.description || '');
-    const badge = isMarkedByVishnu ? `<span style="font-size:11px;background:var(--vishnu-tint);padding:2px 6px;border-radius:4px;color:var(--vishnu);margin-left:6px;font-weight:600;">Marked by Vishnu</span>` : '';
+    const badge = isMarkedByVishnu ? `<span class="tag-badge">Marked by Vishnu</span>` : '';
+    const {participants, splitAmounts} = expenseSplitInfo(e);
+    const isCustomSplit = participants.some(p => Math.abs((Number(splitAmounts[p])||0) - (Number(e.amount)/participants.length)) > 0.0005);
+    const splitBadge = participants.includes('vishnu')
+      ? `<span class="tag-badge split" title="${participants.map(p=>personLabel(p)+' '+fmt(splitAmounts[p])).join(' · ')}">${participants.map(personLabel).join(' + ')}${isCustomSplit ? ' (custom)' : ''}</span>`
+      : '';
     return `
     <tr>
       <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.person}"><span class="dot"></span>${e.person==='irshad'?'Irshad':'Azad'}</span></td>
-      <td>${escapeHtml(cleanDesc)} ${badge} <span style="color:var(--ink-soft);font-size:11.5px;">· ${escapeHtml(e.category||'')}</span></td>
+      <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
+      <td>${escapeHtml(cleanDesc)} ${badge}${splitBadge} <span style="color:var(--ink-soft);font-size:11.5px;">· ${escapeHtml(e.category||'')}</span></td>
       <td class="num">${fmt(e.amount)}</td>
       <td><button class="btn-danger-text" onclick="deleteExpense('${e.id}')">Remove</button></td>
     </tr>`;
   }).join('');
-  
-  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  const total = irshadTotal + azadTotal;
+
+  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
 
   wrap.innerHTML = `<table>
     <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
@@ -638,6 +742,99 @@ function setPayer(p){
   currentPayer = p;
   document.getElementById('pickIrshad').className = 'person-btn' + (p==='irshad' ? ' sel-irshad':'');
   document.getElementById('pickAzad').className = 'person-btn' + (p==='azad' ? ' sel-azad':'');
+  document.getElementById('pickVishnu').className = 'person-btn' + (p==='vishnu' ? ' sel-vishnu':'');
+  // The payer always has to be part of the split
+  const cb = document.getElementById('split'+p.charAt(0).toUpperCase()+p.slice(1));
+  if(cb && !cb.checked){ cb.checked = true; onParticipantsChange(); }
+}
+
+/* ---------------- Split editor (Irshad / Azad / Vishnu) ---------------- */
+function getSplitParticipants(){
+  const list = [];
+  if(document.getElementById('splitIrshad').checked) list.push('irshad');
+  if(document.getElementById('splitAzad').checked) list.push('azad');
+  if(document.getElementById('splitVishnu').checked) list.push('vishnu');
+  return list.length ? list : ['irshad','azad'];
+}
+
+function onParticipantsChange(){
+  splitManual = {};
+  const parts = getSplitParticipants();
+  if(parts.includes('vishnu')) splitEditorOpen = true; // auto-expand whenever Vishnu joins
+  recalcSplitValues();
+  renderSplitEditor();
+}
+
+function toggleSplitEditor(){
+  splitEditorOpen = !splitEditorOpen;
+  renderSplitEditor();
+}
+
+function onAmountChange(){
+  recalcSplitValues();
+  renderSplitEditor();
+}
+
+function onSplitAmountEdit(person, val){
+  splitManual[person] = true;
+  splitValues[person] = parseFloat(val) || 0;
+  recalcSplitValues();
+  renderSplitEditor();
+}
+
+function resetSplitEqual(){
+  splitManual = {};
+  recalcSplitValues();
+  renderSplitEditor();
+}
+
+// Any amount the user hand-edits is locked; whatever's left of the total
+// is shared out evenly across the remaining (not manually edited) people.
+function recalcSplitValues(){
+  const parts = getSplitParticipants();
+  const total = parseFloat(document.getElementById('expAmount').value) || 0;
+  let manualSum = 0;
+  parts.forEach(p=>{ if(splitManual[p]) manualSum += (splitValues[p]||0); });
+  const remaining = Math.max(0, total - manualSum);
+  const autoParts = parts.filter(p=>!splitManual[p]);
+  const share = autoParts.length ? remaining/autoParts.length : 0;
+  const newValues = {};
+  parts.forEach(p=>{ newValues[p] = splitManual[p] ? (splitValues[p]||0) : share; });
+  splitValues = newValues;
+}
+
+function renderSplitEditor(){
+  const parts = getSplitParticipants();
+  const wrap = document.getElementById('splitEditorWrap');
+  const btn = document.getElementById('splitCustomizeBtn');
+  const hint = document.getElementById('splitHint');
+  const showEditor = splitEditorOpen && parts.length > 1;
+  wrap.style.display = showEditor ? 'block' : 'none';
+  btn.textContent = splitEditorOpen ? 'Hide split amounts' : 'Customize amounts';
+
+  if(parts.includes('vishnu')){
+    hint.textContent = 'Vishnu is in on this one — the total splits three ways by default. Adjust any amount below if his share varies; the rest rebalances between the others.';
+  } else {
+    hint.textContent = 'Split evenly between Irshad and Azad by default. Tick Vishnu to include him — the total then splits three ways, and you can fine-tune each person\'s share below.';
+  }
+
+  if(!showEditor) return;
+  const total = parseFloat(document.getElementById('expAmount').value) || 0;
+  document.getElementById('splitEditorRows').innerHTML = parts.map(p=>{
+    const val = (splitValues[p]||0).toFixed(3);
+    return `<div class="split-row">
+      <span class="who-chip ${p}"><span class="dot"></span>${personLabel(p)}</span>
+      <input type="number" step="0.001" min="0" class="split-amount-input" value="${val}" oninput="onSplitAmountEdit('${p}', this.value)">
+    </div>`;
+  }).join('');
+  const sum = parts.reduce((s,p)=> s + (splitValues[p]||0), 0);
+  const diff = total - sum;
+  const totalEl = document.getElementById('splitEditorTotal');
+  if(Math.abs(diff) < 0.0005){
+    totalEl.innerHTML = `<span style="color:var(--emerald-dark);">✓ Split matches the total (${fmt(total)})</span>`;
+  } else {
+    totalEl.innerHTML = `<span style="color:var(--rose);">Splits add up to ${fmt(sum)} — ${diff>0?'short by':'over by'} ${fmt(Math.abs(diff))}</span>`;
+  }
 }
 
 async function addExpense(){
@@ -647,13 +844,27 @@ async function addExpense(){
   const category = document.getElementById('expCategory').value;
   const description = document.getElementById('expDesc').value.trim();
   if(!amount || amount<=0) return showToast('Enter a valid amount.');
+
+  const participants = getSplitParticipants();
+  if(!participants.includes(currentPayer)) return showToast('The payer must be included in the split.');
+
+  recalcSplitValues();
+  const splitAmounts = {};
+  participants.forEach(p=> splitAmounts[p] = +(splitValues[p]||0).toFixed(3));
+  const sumCheck = participants.reduce((s,p)=>s+splitAmounts[p],0);
+  if(Math.abs(sumCheck - amount) > 0.005) return showToast('Split amounts don\'t add up to the total — adjust before saving.');
+
   await db.collection('expenses').add({
     person: currentPayer, amount, date, category, description,
+    splitWith: participants, splitAmounts,
     cycleKey: CURRENT_CYCLE, archived:false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
   document.getElementById('expAmount').value='';
   document.getElementById('expDesc').value='';
+  document.getElementById('splitVishnu').checked = false;
+  splitEditorOpen = false;
+  onParticipantsChange();
   showToast('Expense added.');
 }
 
@@ -664,48 +875,45 @@ async function deleteExpense(id){
 
 /* ---------------- Settle cycle ---------------- */
 function openSettleModal(){
-  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  const total = irshadTotal + azadTotal;
+  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
   if(total===0){ showToast('No expenses to settle yet.'); return; }
-  const half = total/2;
-  const diff = irshadTotal - half;
-  let settleLine;
-  if(Math.abs(diff)<0.0005){ settleLine = `Already settled — both paid an equal share.`; }
-  else if(diff>0){ settleLine = `Azad pays Irshad <b>${fmt(diff)}</b>`; }
-  else { settleLine = `Irshad pays Azad <b>${fmt(-diff)}</b>`; }
+  const {net, spent} = computeNetBalances(liveExpenses);
+  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
+  const txns = simplifyDebts(net);
+
+  const settleLines = txns.length
+    ? txns.map(t=>`<div class="settlement-line">${personLabel(t.from)} pays ${personLabel(t.to)} <b>${fmt(t.amount)}</b></div>`).join('')
+    : `<div class="settlement-line">Already settled — everyone paid their share.</div>`;
 
   document.getElementById('settleModalBody').innerHTML = `
-    <div class="form-row" style="grid-template-columns:1fr 1fr;margin-bottom:4px;">
-      <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadTotal)}</div></div>
-      <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadTotal)}</div></div>
+    <div class="form-row" style="grid-template-columns:${vishnuInvolved?'1fr 1fr 1fr':'1fr 1fr'};margin-bottom:4px;">
+      <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.irshad)}</div></div>
+      <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.azad)}</div></div>
+      ${vishnuInvolved ? `<div><label>Vishnu Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.vishnu)}</div></div>` : ''}
     </div>
     <div style="margin-top:10px;"><label>Total Cycle Expense</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
-    <div class="settlement-line">${settleLine}</div>
+    ${settleLines}
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming will archive all entries to History and start a fresh cycle.</p>
   `;
   openModal('settleModal');
 }
 
 async function confirmSettle(){
-  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  const total = irshadTotal + azadTotal;
-  const half = total/2;
-  const diff = irshadTotal - half;
-  let settlement = null;
-  if(Math.abs(diff)>=0.0005){
-    settlement = diff>0 ? {owedBy:'azad', owedTo:'irshad', amount:+diff.toFixed(3)} : {owedBy:'irshad', owedTo:'azad', amount:+(-diff).toFixed(3)};
-  }
+  const {net, spent} = computeNetBalances(liveExpenses);
+  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const txns = simplifyDebts(net);
   const {start,end} = cycleRangeFor(CURRENT_CYCLE);
-  const snapshotExpenses = liveExpenses.map(e=>({person:e.person, amount:e.amount, description:e.description, category:e.category||'', date:e.date}));
+  const snapshotExpenses = liveExpenses.map(e=>{
+    const {participants, splitAmounts} = expenseSplitInfo(e);
+    return {person:e.person, amount:e.amount, description:e.description, category:e.category||'', date:e.date, splitWith:participants, splitAmounts};
+  });
 
   await db.collection('cycleHistory').doc(CURRENT_CYCLE).set({
     cycleKey: CURRENT_CYCLE,
     startDate: start.toISOString().slice(0,10),
     endDate: end.toISOString().slice(0,10),
-    totalExpense: total, irshadTotal, azadTotal,
-    settlement, expenses: snapshotExpenses,
+    totalExpense: total, irshadTotal: spent.irshad, azadTotal: spent.azad, vishnuTotal: spent.vishnu,
+    settlements: txns, expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
@@ -891,16 +1099,24 @@ function renderHistoryCycles(){
   }
   wrap.innerHTML = cycleHistoryCache.map((c,i)=>{
     const label = new Date(c.startDate).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-    let settleTxt = 'Split evenly — no balance owed';
-    if(c.settlement) settleTxt = `${c.settlement.owedBy==='azad'?'Azad':'Irshad'} paid ${c.settlement.owedTo==='irshad'?'Irshad':'Azad'} ${fmt(c.settlement.amount)}`;
+    let settleTxt;
+    if(c.settlements && c.settlements.length){
+      settleTxt = c.settlements.map(t=>`${personLabel(t.from)} paid ${personLabel(t.to)} ${fmt(t.amount)}`).join(' &nbsp;·&nbsp; ');
+    } else if(c.settlement){
+      settleTxt = `${c.settlement.owedBy==='azad'?'Azad':'Irshad'} paid ${c.settlement.owedTo==='irshad'?'Irshad':'Azad'} ${fmt(c.settlement.amount)}`;
+    } else {
+      settleTxt = 'Split evenly — no balance owed';
+    }
+    const hasVishnu = Number(c.vishnuTotal) > 0;
     const rows = (c.expenses||[]).map(e=>{
       const isMarkedByVishnu = e.description && e.description.includes('[Marked by Vishnu]');
       const cleanDesc = isMarkedByVishnu ? e.description.replace('[Marked by Vishnu]', '').trim() : (e.description || '');
-      const badge = isMarkedByVishnu ? `<span style="font-size:11px;background:var(--vishnu-tint);padding:2px 6px;border-radius:4px;color:var(--vishnu);margin-left:6px;font-weight:600;">Marked by Vishnu</span>` : '';
+      const badge = isMarkedByVishnu ? `<span class="tag-badge">Marked by Vishnu</span>` : '';
+      const splitBadge = (e.splitWith && e.splitWith.includes('vishnu')) ? `<span class="tag-badge split">${e.splitWith.map(personLabel).join(' + ')}</span>` : '';
       return `
       <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.person}"><span class="dot"></span>${e.person==='irshad'?'Irshad':'Azad'}</span></td>
-      <td>${escapeHtml(cleanDesc)} ${badge}</td><td class="num">${fmt(e.amount)}</td></tr>`;
+      <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
+      <td>${escapeHtml(cleanDesc)} ${badge}${splitBadge}</td><td class="num">${fmt(e.amount)}</td></tr>`;
     }).join('');
     return `<div class="hist-item" id="hc-${c.id}">
       <div class="hist-head" onclick="toggleHist('hc-${c.id}')">
@@ -908,9 +1124,10 @@ function renderHistoryCycles(){
         <div class="hist-right"><span class="hist-total mono">${fmt(c.totalExpense)}</span><span class="stamp settled"><span class="dot"></span>Settled</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
       </div>
       <div class="hist-body">
-        <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:14px;">
+        <div class="form-row" style="grid-template-columns:${hasVishnu?'1fr 1fr 1fr':'1fr 1fr'};margin-top:14px;">
           <div><label>Irshad Spent</label><div class="mono" style="font-weight:600;">${fmt(c.irshadTotal)}</div></div>
           <div><label>Azad Spent</label><div class="mono" style="font-weight:600;">${fmt(c.azadTotal)}</div></div>
+          ${hasVishnu ? `<div><label>Vishnu Spent</label><div class="mono" style="font-weight:600;">${fmt(c.vishnuTotal)}</div></div>` : ''}
         </div>
         <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
         <div class="settlement-line">${settleTxt}</div>
@@ -1049,6 +1266,7 @@ document.getElementById('saveConfigBtn').addEventListener('click', ()=>{
 document.getElementById('expDate').value = todayISO();
 document.getElementById('vDate').value = todayISO();
 document.getElementById('hDate').value = todayISO();
+onParticipantsChange();
 initFirebase();
 </script>
 </body>

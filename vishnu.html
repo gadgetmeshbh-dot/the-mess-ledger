@@ -74,7 +74,7 @@ tr:last-child td{border-bottom:none;}
 
   <div class="info-box">👋 Hi Vishnu! You can only see and add entries on this tab — not the room's own expenses. Use <b>Personal Item</b> when you paid for something of Irshad's or Azad's that has nothing to do with the mess. Use <b>Mess Purchase</b> when you paid for something that's part of the mess and should be credited to Irshad or Azad in their ledger. Either way it comes off what you owe.</div>
 
-  <div class="widgets">
+  <div class="widgets" style="grid-template-columns:repeat(2,1fr);">
     <div class="widget">
       <div class="widget-label">Net Total You Owe</div>
       <div class="widget-value mono" id="vTotal">BHD 0.000</div>
@@ -82,6 +82,14 @@ tr:last-child td{border-bottom:none;}
     <div class="widget">
       <div class="widget-label">Active Records</div>
       <div class="widget-value mono" id="vCount">0 entries</div>
+    </div>
+    <div class="widget">
+      <div class="widget-label">You Owe Irshad</div>
+      <div class="widget-value mono" id="vOwesIrshad">BHD 0.000</div>
+    </div>
+    <div class="widget">
+      <div class="widget-label">You Owe Azad</div>
+      <div class="widget-value mono" id="vOwesAzad">BHD 0.000</div>
     </div>
   </div>
 
@@ -152,15 +160,38 @@ document.getElementById('pDate').value = todayISO();
 //   'vishnu_mess_assign'  -> Vishnu paid a mess item, credited to Irshad/Azad. Reduces what he owes AND lands in the mess total.
 function vishnuKindOf(e){ return e.kind || (e.assignTo ? 'vishnu_mess_assign' : 'house_for_vishnu'); }
 
+// Same split-info shape used in index.html — needed to read Vishnu's share
+// out of a shared mess expense and who fronted it.
+function expenseSplitInfo(e){
+  const amount = Number(e.amount) || 0;
+  if(e.splitWith && e.splitAmounts){
+    return {participants: e.splitWith, splitAmounts: e.splitAmounts, payer: e.person};
+  }
+  return {participants:['irshad','azad'], splitAmounts:{irshad: amount/2, azad: amount/2}, payer: e.person};
+}
+function personLabel(p){ return p==='irshad' ? 'Irshad' : p==='azad' ? 'Azad' : 'Vishnu'; }
+
+let vishnuExpensesCache = [];
+let messExpensesCache = [];
+
 db.collection('vishnuExpenses').where('settled','==',false)
   .onSnapshot(snap => {
-    let items = [];
-    snap.forEach(doc => items.push({id: doc.id, ...doc.data()}));
-    items.sort((a,b) => (a.date < b.date ? 1 : -1));
-    renderVishnuView(items);
+    vishnuExpensesCache = [];
+    snap.forEach(doc => vishnuExpensesCache.push({id: doc.id, ...doc.data()}));
+    vishnuExpensesCache.sort((a,b) => (a.date < b.date ? 1 : -1));
+    renderVishnuView();
   }, err => {
     document.getElementById('vishnuTableWrap').innerHTML = `<div class="empty-state">Could not load items. Check database rules.</div>`;
   });
+
+// Vishnu's share of shared mess expenses — this is money he owes to whoever
+// paid that expense, and it's not tracked in vishnuExpenses at all.
+db.collection('expenses').where('archived','==',false)
+  .onSnapshot(snap => {
+    messExpensesCache = [];
+    snap.forEach(doc => messExpensesCache.push({id: doc.id, ...doc.data()}));
+    renderVishnuView();
+  }, err => { /* main ledger may not be readable to Vishnu's rules — fine, just skip */ });
 
 async function addVishnuPayment(){
   const amount = parseFloat(document.getElementById('pAmount').value);
@@ -210,29 +241,61 @@ async function addVishnuPayment(){
 
 document.getElementById('addVishnuPaymentBtn').addEventListener('click', addVishnuPayment);
 
-function renderVishnuView(items){
-  let totalNet = 0;
-  items.forEach(e => {
-    const amt = Number(e.amount) || 0;
-    const kind = vishnuKindOf(e);
-    totalNet += (kind === 'house_for_vishnu') ? amt : -amt;
+function renderVishnuView(){
+  let owedToIrshad = 0, owedToAzad = 0;
+
+  const splitEntries = messExpensesCache.filter(e=> expenseSplitInfo(e).participants.includes('vishnu'));
+  splitEntries.forEach(e=>{
+    const {splitAmounts, payer} = expenseSplitInfo(e);
+    const share = Number(splitAmounts.vishnu) || 0;
+    if(payer==='azad') owedToAzad += share; else owedToIrshad += share;
   });
 
+  vishnuExpensesCache.forEach(e => {
+    const amt = Number(e.amount) || 0;
+    const kind = vishnuKindOf(e);
+    if(kind === 'house_for_vishnu'){
+      if(e.paidBy==='azad') owedToAzad += amt; else owedToIrshad += amt;
+    } else if(kind === 'vishnu_personal_for'){
+      if(e.target==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
+    } else { // vishnu_mess_assign
+      if(e.assignTo==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
+    }
+  });
+
+  const totalNet = owedToIrshad + owedToAzad;
+
   document.getElementById('vTotal').textContent = fmt(totalNet);
-  document.getElementById('vCount').textContent = `${items.length} records`;
+  document.getElementById('vOwesIrshad').textContent = fmt(owedToIrshad);
+  document.getElementById('vOwesAzad').textContent = fmt(owedToAzad);
+  const totalCount = vishnuExpensesCache.length + splitEntries.length;
+  document.getElementById('vCount').textContent = `${totalCount} records`;
 
   const wrap = document.getElementById('vishnuTableWrap');
-  if(items.length === 0){
+  if(totalCount === 0){
     wrap.innerHTML = `<div class="empty-state">🎉 All clear! No records right now.</div>`;
     return;
   }
 
-  let rows = items.map(e => {
+  let splitRows = splitEntries.map(e=>{
+    const {splitAmounts, payer} = expenseSplitInfo(e);
+    const share = Number(splitAmounts.vishnu) || 0;
+    const cleanDesc = (e.description||'').replace('[Marked by Vishnu]','').trim();
+    return `
+      <tr>
+        <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+        <td><span class="who-chip ${payer}"><span class="dot"></span>Your share — owed to ${personLabel(payer)}</span></td>
+        <td>${cleanDesc}</td>
+        <td class="num">${fmt(share)}</td>
+      </tr>`;
+  }).join('');
+
+  let rows = vishnuExpensesCache.map(e => {
     const amt = Number(e.amount) || 0;
     const kind = vishnuKindOf(e);
     let chipClass, chipLabel, effAmt;
     if(kind === 'house_for_vishnu'){
-      chipClass = 'vishnu'; chipLabel = 'Your item on the house bill'; effAmt = amt;
+      chipClass = e.paidBy || 'irshad'; chipLabel = `Your item on the house bill — owed to ${e.paidBy==='azad'?'Azad':'Irshad'}`; effAmt = amt;
     } else if(kind === 'vishnu_personal_for'){
       chipClass = e.target || 'vishnu'; chipLabel = `You paid — ${e.target==='azad'?'Azad':'Irshad'}'s personal item`; effAmt = -amt;
     } else {
@@ -249,8 +312,10 @@ function renderVishnuView(items){
 
   wrap.innerHTML = `<table>
     <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead>
-    <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(totalNet)}</td></tr>
+    <tbody>${splitRows}${rows}
+      <tr class="total-row"><td colspan="3">You owe Irshad</td><td class="num">${fmt(owedToIrshad)}</td></tr>
+      <tr class="total-row"><td colspan="3">You owe Azad</td><td class="num">${fmt(owedToAzad)}</td></tr>
+      <tr class="total-row"><td colspan="3">Net Balance Due from You</td><td class="num">${fmt(totalNet)}</td></tr>
     </tbody></table>`;
 }
 

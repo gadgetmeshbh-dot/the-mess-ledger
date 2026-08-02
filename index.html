@@ -358,8 +358,8 @@ tr:last-child td{border-bottom:none;}
 
       <div class="widgets" style="grid-template-columns:repeat(3,1fr);">
         <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Net Balance Due from Vishnu</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
-        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Paid by Irshad</div><div class="widget-value mono" id="vIrshad">BHD 0.000</div></div>
-        <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Paid by Azad</div><div class="widget-value mono" id="vAzad">BHD 0.000</div></div>
+        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Vishnu Owes Irshad</div><div class="widget-value mono" id="vIrshad">BHD 0.000</div></div>
+        <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Vishnu Owes Azad</div><div class="widget-value mono" id="vAzad">BHD 0.000</div></div>
       </div>
 
       <div class="card">
@@ -663,11 +663,14 @@ function expenseSplitInfo(e){
 function computeNetBalances(list){
   const net = {irshad:0, azad:0, vishnu:0};
   const spent = {irshad:0, azad:0, vishnu:0};
+  const messSpent = {irshad:0, azad:0, vishnu:0}; // spent[payer] minus any Vishnu share tucked inside that same expense — Vishnu's portion isn't "our" mess spend
   const shareOwed = {irshad:0, azad:0, vishnu:0};
   list.forEach(e=>{
     const {participants, splitAmounts, payer} = expenseSplitInfo(e);
     const amount = Number(e.amount) || 0;
+    const vishnuShare = participants.includes('vishnu') ? (Number(splitAmounts.vishnu)||0) : 0;
     spent[payer] = (spent[payer]||0) + amount;
+    messSpent[payer] = (messSpent[payer]||0) + (amount - vishnuShare);
     net[payer] = (net[payer]||0) + amount;
     participants.forEach(p=>{
       const share = Number(splitAmounts[p]) || 0;
@@ -675,7 +678,7 @@ function computeNetBalances(list){
       net[p] = (net[p]||0) - share;
     });
   });
-  return {net, spent, shareOwed};
+  return {net, spent, messSpent, shareOwed};
 }
 
 // Greedy debt simplification — turns a 3-way net balance into the
@@ -722,13 +725,13 @@ function renderDashboard(){
   const daysLeft = Math.max(0, Math.ceil((end - today)/86400000)+1);
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
-  const {net, spent} = computeNetBalances(liveExpenses);
+  const {net, spent, messSpent} = computeNetBalances(liveExpenses);
   const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const total = computeMessTotal(liveExpenses); // excludes Vishnu's share — this is what Irshad & Azad split
 
   document.getElementById('wTotal').textContent = fmt(total);
-  document.getElementById('wIrshad').textContent = fmt(spent.irshad);
-  document.getElementById('wAzad').textContent = fmt(spent.azad);
+  document.getElementById('wIrshad').textContent = fmt(messSpent.irshad);
+  document.getElementById('wAzad').textContent = fmt(messSpent.azad);
   document.getElementById('wIrshadCount').textContent = `${liveExpenses.filter(e=>e.person==='irshad').length} entries`;
   document.getElementById('wAzadCount').textContent = `${liveExpenses.filter(e=>e.person==='azad').length} entries`;
   document.getElementById('entryCount').textContent = `${liveExpenses.length} entries`;
@@ -923,7 +926,7 @@ function openSettleModal(){
   if(liveExpenses.length===0){ showToast('No expenses to settle yet.'); return; }
   const total = computeMessTotal(liveExpenses);
   const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
-  const {net, spent} = computeNetBalances(liveExpenses);
+  const {net, spent, messSpent} = computeNetBalances(liveExpenses);
   const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
   const txns = simplifyDebts(net);
 
@@ -933,8 +936,8 @@ function openSettleModal(){
 
   document.getElementById('settleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;margin-bottom:4px;">
-      <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.irshad)}</div></div>
-      <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.azad)}</div></div>
+      <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(messSpent.irshad)}</div></div>
+      <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(messSpent.azad)}</div></div>
     </div>
     <div style="margin-top:10px;"><label>Total Cycle Expense (Irshad &amp; Azad)</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
     ${vishnuInvolved ? `<p style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Vishnu's share of ${fmt(vishnuShareTotal)} is excluded — he's an outsider to this split and settles separately.</p>` : ''}
@@ -945,7 +948,7 @@ function openSettleModal(){
 }
 
 async function confirmSettle(){
-  const {net, spent} = computeNetBalances(liveExpenses);
+  const {net, spent, messSpent} = computeNetBalances(liveExpenses);
   const total = computeMessTotal(liveExpenses);
   const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const txns = simplifyDebts(net);
@@ -959,7 +962,7 @@ async function confirmSettle(){
     cycleKey: CURRENT_CYCLE,
     startDate: start.toISOString().slice(0,10),
     endDate: end.toISOString().slice(0,10),
-    totalExpense: total, irshadTotal: spent.irshad, azadTotal: spent.azad, vishnuTotal: vishnuShareTotal,
+    totalExpense: total, irshadTotal: messSpent.irshad, azadTotal: messSpent.azad, vishnuTotal: vishnuShareTotal,
     settlements: txns, expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -980,43 +983,75 @@ async function confirmSettle(){
 // Older docs saved before this update only have `assignTo` — treated as 'vishnu_mess_assign' for backward compatibility.
 function vishnuKindOf(e){ return e.kind || (e.assignTo ? 'vishnu_mess_assign' : 'house_for_vishnu'); }
 
+// Vishnu can owe money two ways: (1) his share of a shared mess expense on the
+// dashboard — owed to whoever paid that expense, and (2) entries logged here on
+// his tab (house_for_vishnu is owed to whoever paidBy says; vishnu_personal_for
+// and vishnu_mess_assign are credits that reduce what he owes that same person).
 function vishnuTotals(){
-  let netVishnuOwes = 0, irshadV = 0, azadV = 0;
+  let owedToIrshad = 0, owedToAzad = 0;
+
+  liveExpenses.forEach(e=>{
+    const {participants, splitAmounts, payer} = expenseSplitInfo(e);
+    if(!participants.includes('vishnu')) return;
+    const share = Number(splitAmounts.vishnu) || 0;
+    if(payer==='azad') owedToAzad += share; else owedToIrshad += share; // defaults to irshad
+  });
+
   liveVishnu.forEach(e => {
     const amt = Number(e.amount) || 0;
     const kind = vishnuKindOf(e);
     if(kind === 'house_for_vishnu'){
-      netVishnuOwes += amt;
+      if(e.paidBy==='azad') owedToAzad += amt; else owedToIrshad += amt;
     } else if(kind === 'vishnu_personal_for'){
-      netVishnuOwes -= amt;
+      if(e.target==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
     } else { // vishnu_mess_assign
-      netVishnuOwes -= amt;
-      if(e.assignTo==='irshad') irshadV += amt; else if(e.assignTo==='azad') azadV += amt;
+      if(e.assignTo==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
     }
   });
-  return {netVishnuOwes, irshadV, azadV};
+
+  const netVishnuOwes = owedToIrshad + owedToAzad;
+  return {netVishnuOwes, owedToIrshad, owedToAzad};
 }
 
 function renderVishnu(){
-  const {netVishnuOwes, irshadV, azadV} = vishnuTotals();
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
 
   document.getElementById('vTotal').textContent = fmt(netVishnuOwes);
-  document.getElementById('vIrshad').textContent = fmt(irshadV);
-  document.getElementById('vAzad').textContent = fmt(azadV);
-  document.getElementById('vCount').textContent = `${liveVishnu.length} entries`;
-  document.getElementById('vEntryCount').textContent = `${liveVishnu.length} entries`;
+  document.getElementById('vIrshad').textContent = fmt(owedToIrshad);
+  document.getElementById('vAzad').textContent = fmt(owedToAzad);
+
+  const splitEntries = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu'));
+  const totalEntries = liveVishnu.length + splitEntries.length;
+  document.getElementById('vCount').textContent = `${totalEntries} entries`;
+  document.getElementById('vEntryCount').textContent = `${totalEntries} entries`;
 
   const wrap = document.getElementById('vishnuTableWrap');
-  if(liveVishnu.length===0){
+  if(totalEntries===0){
     wrap.innerHTML = `<div class="empty-state"><span class="big">🤝</span>Nothing on Vishnu's tab right now.</div>`;
     return;
   }
+
+  // Vishnu's share of shared mess expenses — owed to whoever paid that expense.
+  let splitRows = splitEntries.map(e=>{
+    const {splitAmounts, payer} = expenseSplitInfo(e);
+    const share = Number(splitAmounts.vishnu) || 0;
+    const cleanDesc = (e.description||'').replace('[Marked by Vishnu]','').trim();
+    return `
+    <tr>
+      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+      <td><span class="who-chip ${payer}"><span class="dot"></span>Vishnu owes ${personLabel(payer)}</span></td>
+      <td>${escapeHtml(cleanDesc)} <span style="font-size:11px;background:var(--vishnu-tint);padding:2px 6px;border-radius:4px;color:var(--vishnu);font-weight:600;margin-left:6px;">Split share</span></td>
+      <td class="num">${fmt(share)}</td>
+      <td></td>
+    </tr>`;
+  }).join('');
+
   let rows = liveVishnu.map(e=>{
     const amt = Number(e.amount) || 0;
     const kind = vishnuKindOf(e);
     let chipClass, chipLabel, effAmt, tagHtml = '';
     if(kind === 'house_for_vishnu'){
-      chipClass = 'vishnu'; chipLabel = 'Vishnu owes'; effAmt = amt;
+      chipClass = e.paidBy || 'irshad'; chipLabel = `Vishnu owes ${e.paidBy==='azad'?'Azad':'Irshad'}`; effAmt = amt;
     } else if(kind === 'vishnu_personal_for'){
       chipClass = e.target || 'vishnu'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
     } else {
@@ -1035,7 +1070,9 @@ function renderVishnu(){
 
   wrap.innerHTML = `<table>
     <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th><th></th></tr></thead>
-    <tbody>${rows}
+    <tbody>${splitRows}${rows}
+      <tr class="total-row"><td colspan="3">Vishnu owes Irshad</td><td class="num">${fmt(owedToIrshad)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">Vishnu owes Azad</td><td class="num">${fmt(owedToAzad)}</td><td></td></tr>
       <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(netVishnuOwes)}</td><td></td></tr>
     </tbody></table>`;
 }
@@ -1104,11 +1141,11 @@ async function deleteVishnu(id){
 
 function openVishnuSettleModal(){
   if(liveVishnu.length===0){ showToast('Nothing to settle yet.'); return; }
-  const {netVishnuOwes, irshadV, azadV} = vishnuTotals();
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
   document.getElementById('vishnuSettleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;">
-      <div><label>Irshad Credited</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadV)}</div></div>
-      <div><label>Azad Credited</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadV)}</div></div>
+      <div><label>Vishnu Owes Irshad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(owedToIrshad)}</div></div>
+      <div><label>Vishnu Owes Azad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(owedToAzad)}</div></div>
     </div>
     <div style="margin-top:10px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming archives these ${liveVishnu.length} entries to History and clears the tab.</p>
@@ -1117,10 +1154,10 @@ function openVishnuSettleModal(){
 }
 
 async function confirmVishnuSettle(){
-  const {netVishnuOwes, irshadV, azadV} = vishnuTotals();
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
   const snapshotExpenses = liveVishnu.map(e=>({kind:vishnuKindOf(e), assignTo:e.assignTo, target:e.target, paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date}));
   await db.collection('vishnuHistory').add({
-    total: netVishnuOwes, paidByIrshad: irshadV, paidByAzad: azadV,
+    total: netVishnuOwes, owedToIrshad, owedToAzad,
     expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1210,8 +1247,8 @@ function renderHistoryVishnu(){
       </div>
       <div class="hist-body">
         <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:14px;">
-          <div><label>Irshad Credited</label><div class="mono" style="font-weight:600;">${fmt(c.paidByIrshad)}</div></div>
-          <div><label>Azad Credited</label><div class="mono" style="font-weight:600;">${fmt(c.paidByAzad)}</div></div>
+          <div><label>Vishnu Owed Irshad</label><div class="mono" style="font-weight:600;">${fmt(c.owedToIrshad!==undefined ? c.owedToIrshad : c.paidByIrshad)}</div></div>
+          <div><label>Vishnu Owed Azad</label><div class="mono" style="font-weight:600;">${fmt(c.owedToAzad!==undefined ? c.owedToAzad : c.paidByAzad)}</div></div>
         </div>
         <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead><tbody>${rows}</tbody></table>
       </div>

@@ -286,6 +286,7 @@ tr:last-child td{border-bottom:none;}
       <div class="widgets">
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent <span class="tag-badge split" id="wTotalNote" style="display:none;margin-left:4px;">excl. Vishnu</span></div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
+        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
         <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
       </div>
@@ -725,7 +726,7 @@ function renderDashboard(){
   const daysLeft = Math.max(0, Math.ceil((end - today)/86400000)+1);
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
-  const {net, spent, messSpent} = computeNetBalances(liveExpenses);
+  const {net, spent, messSpent, shareOwed} = computeNetBalances(liveExpenses);
   const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const total = computeMessTotal(liveExpenses); // excludes Vishnu's share — this is what Irshad & Azad split
 
@@ -735,6 +736,28 @@ function renderDashboard(){
   document.getElementById('wIrshadCount').textContent = `${liveExpenses.filter(e=>e.person==='irshad').length} entries`;
   document.getElementById('wAzadCount').textContent = `${liveExpenses.filter(e=>e.person==='azad').length} entries`;
   document.getElementById('entryCount').textContent = `${liveExpenses.length} entries`;
+
+  // Compares what each of Irshad & Azad actually spent on the mess against
+  // their share of the mess total — Vishnu is excluded here, same basis as
+  // the Spent widgets above; his own debts live on his tab.
+  const irshadDiff = messSpent.irshad - (shareOwed.irshad||0);
+  const azadDiff = messSpent.azad - (shareOwed.azad||0);
+  const balCard = document.getElementById('wBalanceCard');
+  const balVal = document.getElementById('wBalance');
+  const balSub = document.getElementById('wBalanceSub');
+  if(liveExpenses.length === 0 || Math.abs(irshadDiff) < 0.0005){
+    balCard.className = 'widget balance settled';
+    balVal.textContent = 'Settled';
+    balSub.textContent = liveExpenses.length===0 ? 'No expenses logged yet' : 'Everyone paid their share';
+  } else if(irshadDiff > 0){
+    balCard.className = 'widget balance owed';
+    balVal.textContent = fmt(irshadDiff);
+    balSub.textContent = 'Azad owes Irshad';
+  } else {
+    balCard.className = 'widget balance owed';
+    balVal.textContent = fmt(azadDiff);
+    balSub.textContent = 'Irshad owes Azad';
+  }
 
   const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
   document.getElementById('wVishnuWidget').style.display = vishnuInvolved ? '' : 'none';

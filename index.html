@@ -3,160 +3,439 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Mess Ledger — Room Expenses &amp; Vishnu Tab</title>
+<title>Ledger — Irshad &amp; Azad</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📒</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;7&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+/* ============ TOKENS ============ */
 :root{
-  --ink:#141F27;--ink-soft:#4B5A63;--paper:#EFEBDF;--paper-raised:#FFFFFF;
-  --rule:#DAD3BE;--emerald:#1F6F54;--emerald-dark:#164E3B;--emerald-tint:#E4EFE8;
-  --azad:#2C5F8A;--azad-tint:#E2EBF2;--vishnu:#8A5A2C;--vishnu-tint:#F2E7D6;
-  --rose:#9C3A32;--radius:10px;
+  --ink:#141F27;
+  --ink-soft:#4B5A63;
+  --paper:#EFEBDF;
+  --paper-raised:#FFFFFF;
+  --rule:#DAD3BE;
+  --sidebar:#122029;
+  --sidebar-text:#E7E2D2;
+  --sidebar-text-dim:#8CA0A8;
+  --emerald:#1F6F54;
+  --emerald-dark:#164E3B;
+  --emerald-tint:#E4EFE8;
+  --brass:#B4842A;
+  --brass-tint:#F6ECD8;
+  --rose:#9C3A32;
+  --rose-tint:#F5E4E1;
+  --azad:#2C5F8A;
+  --azad-tint:#E5EEF5;
+  --irshad:#1F6F54;
+  --irshad-tint:#E4EFE8;
+  --vishnu:#8A5A2C;
+  --vishnu-tint:#F2E7D6;
+  --radius:10px;
   --shadow: 0 1px 2px rgba(20,31,39,0.06), 0 8px 24px -12px rgba(20,31,39,0.18);
 }
 *{box-sizing:border-box;}
-body{font-family:'Inter',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;margin:0;padding:24px 16px;display:flex;justify-content:center;}
-.container{max-width:760px;width:100%;}
-h1,h2,.serif{font-family:'Fraunces',serif;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;
+  background:var(--paper);
+  color:var(--ink);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.serif{font-family:'Fraunces',serif;}
 .mono{font-family:'IBM Plex Mono',monospace;}
-.brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
-.brand-left{display:flex;align-items:center;gap:10px;}
-.brand-mark{width:38px;height:38px;border-radius:9px;background:var(--emerald);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;}
-.brand-name{font-family:'Fraunces',serif;font-size:20px;font-weight:600;}
-.brand-sub{font-size:11px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;}
-.card{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden;}
-.card-head{padding:16px 20px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;}
-.card-head h3{margin:0;font-size:16px;}
+a{color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+::selection{background:var(--brass-tint);}
+
+/* ============ LAYOUT ============ */
+.app{display:flex;min-height:100vh;}
+.sidebar{
+  width:230px;flex-shrink:0;background:var(--sidebar);color:var(--sidebar-text);
+  display:flex;flex-direction:column;padding:28px 18px;position:fixed;top:0;left:0;bottom:0;
+  transition:transform .25s ease;z-index:50;
+}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px 26px 6px;border-bottom:1px solid rgba(231,226,210,0.12);margin-bottom:22px;}
+.brand-mark{width:34px;height:34px;border-radius:8px;background:linear-gradient(155deg,var(--emerald),var(--emerald-dark));display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:16px;color:var(--brass-tint);flex-shrink:0;}
+.brand-name{font-family:'Fraunces',serif;font-size:17px;font-weight:600;line-height:1.15;}
+.brand-sub{font-size:10.5px;color:var(--sidebar-text-dim);letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
+.nav{display:flex;flex-direction:column;gap:2px;}
+.nav-item{
+  display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:8px;font-size:14px;font-weight:500;
+  color:var(--sidebar-text-dim);text-decoration:none;background:none;border:none;text-align:left;width:100%;
+}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;}
+.nav-item:hover{background:rgba(231,226,210,0.06);color:var(--sidebar-text);}
+.nav-item.active{background:rgba(31,111,84,0.35);color:#fff;}
+.sidebar-foot{margin-top:auto;padding-top:16px;border-top:1px solid rgba(231,226,210,0.1);}
+.cycle-pill{font-size:11px;color:var(--sidebar-text-dim);margin-bottom:10px;line-height:1.5;}
+.cycle-pill b{color:var(--sidebar-text);font-weight:600;}
+.credit{font-size:10px;color:rgba(140,160,168,0.55);margin-top:10px;}
+.settings-btn{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sidebar-text-dim);background:none;border:1px solid rgba(231,226,210,0.15);padding:8px 10px;border-radius:7px;width:100%;}
+.settings-btn:hover{color:#fff;border-color:rgba(231,226,210,0.35);}
+
+.menu-toggle{display:none;position:fixed;top:16px;left:16px;z-index:60;background:var(--sidebar);color:#fff;border:none;width:42px;height:42px;border-radius:9px;align-items:center;justify-content:center;box-shadow:var(--shadow);}
+
+.main{margin-left:230px;flex:1;padding:34px 40px 80px;max-width:1180px;}
+.view{display:none;}
+.view.active{display:block;animation:fade .25s ease;}
+@keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:26px;gap:20px;flex-wrap:wrap;}
+.page-head h1{font-size:27px;font-weight:600;margin:0 0 4px;}
+.page-head p{margin:0;color:var(--ink-soft);font-size:13.5px;}
+.eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--emerald-dark);font-weight:600;margin-bottom:6px;}
+
+/* ============ WIDGETS ============ */
+.widgets{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
+.widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:18px 18px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.widget-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:10px;}
+.widget-value{font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;letter-spacing:-0.5px;}
+.widget-sub{font-size:12px;color:var(--ink-soft);margin-top:6px;}
+.widget.balance{color:#fff;}
+.widget.balance.settled{background:linear-gradient(155deg,var(--emerald),var(--emerald-dark));}
+.widget.balance.owed{background:linear-gradient(155deg,var(--rose),#7A2C26);}
+.widget.balance .widget-label{color:rgba(255,255,255,0.75);}
+.widget.balance .widget-sub{color:rgba(255,255,255,0.8);}
+.widget-bar{position:absolute;left:0;top:0;bottom:0;width:4px;}
+.widget-bar.irshad{background:var(--irshad);}
+.widget-bar.azad{background:var(--azad);}
+
+/* stamp — signature element */
+.stamp{
+  display:inline-flex;align-items:center;gap:6px;border:2px solid currentColor;border-radius:999px;
+  padding:4px 13px 4px 11px;font-family:'Fraunces',serif;font-weight:600;font-size:12px;letter-spacing:.05em;
+  text-transform:uppercase;transform:rotate(-3deg);
+}
+.stamp.settled{color:var(--emerald-dark);}
+.stamp.pending{color:var(--rose);}
+.stamp.dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+
+/* ============ CARD / SECTION ============ */
+.card{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:22px;}
+.card-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--rule);}
+.card-head h3{margin:0;font-size:15.5px;font-weight:600;}
 .card-body{padding:20px;}
-.widgets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
-@media(max-width:600px){.widgets{grid-template-columns:1fr;}}
-.widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
-.widget-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:6px;}
-.widget-value{font-family:'IBM Plex Mono',monospace;font-size:21px;font-weight:600;}
+
+/* ============ FORM ============ */
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
-@media(max-width:600px){.form-row{grid-template-columns:1fr;}}
+.form-row.three{grid-template-columns:1fr 1fr 1fr;}
 label{display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
-input[type=text],input[type=number],input[type=date],select{
+input[type=text],input[type=number],input[type=date],select,textarea{
   width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:7px;background:var(--paper);
   font-family:'Inter',sans-serif;font-size:13.5px;color:var(--ink);
 }
-input:focus,select:focus{outline:2px solid var(--emerald);outline-offset:1px;background:#fff;}
-.btn{padding:10px 18px;border-radius:8px;border:none;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;}
-.btn-primary{background:var(--emerald);color:#fff;}
-.btn-primary:hover{background:#164E3B;}
-.btn-danger{background:transparent;color:var(--rose);padding:4px 8px;font-size:12px;}
-.btn-danger:hover{background:#F9EBEA;}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--emerald);outline-offset:1px;background:#fff;}
+.person-toggle{display:flex;gap:8px;}
+.person-btn{flex:1;padding:11px;border-radius:8px;border:1.5px solid var(--rule);background:var(--paper-raised);font-weight:600;font-size:13.5px;color:var(--ink-soft);display:flex;align-items:center;justify-content:center;gap:7px;}
+.person-btn .dot{width:8px;height:8px;border-radius:50%;background:var(--rule);}
+.person-btn.sel-irshad{border-color:var(--irshad);background:var(--irshad-tint);color:var(--irshad);}
+.person-btn.sel-irshad .dot{background:var(--irshad);}
+.person-btn.sel-azad{border-color:var(--azad);background:var(--azad-tint);color:var(--azad);}
+.person-btn.sel-azad .dot{background:var(--azad);}
+.person-btn.sel-vishnu{border-color:var(--vishnu);background:var(--vishnu-tint);color:var(--vishnu);}
+.person-btn.sel-vishnu .dot{background:var(--vishnu);}
+
+.btn{padding:10px 18px;border-radius:8px;border:none;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;gap:7px;}
+.btn-primary{background:var(--ink);color:#fff;}
+.btn-primary:hover{background:#000;}
+.btn-emerald{background:var(--emerald);color:#fff;}
+.btn-emerald:hover{background:var(--emerald-dark);}
+.btn-ghost{background:none;border:1px solid var(--rule);color:var(--ink);}
+.btn-ghost:hover{border-color:var(--ink);}
+.btn-danger-text{background:none;border:none;color:var(--rose);font-size:12px;font-weight:600;padding:4px 6px;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn-block{width:100%;justify-content:center;}
+
+/* ============ TABLE ============ */
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;padding:8px 10px;border-bottom:1.5px solid var(--ink);}
-td{padding:10px;border-bottom:1px solid var(--rule);vertical-align:middle;}
+td{padding:10px 10px;border-bottom:1px solid var(--rule);vertical-align:middle;}
 td.num,th.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
 tr:last-child td{border-bottom:none;}
-.who-chip{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12px;}
+.who-chip{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;}
 .who-chip .dot{width:7px;height:7px;border-radius:50%;}
-.who-chip.irshad{color:#1F6F54;}.who-chip.irshad .dot{background:#1F6F54;}
-.who-chip.azad{color:#2C5F8A;}.who-chip.azad .dot{background:#2C5F8A;}
-.who-chip.vishnu{color:#8A5A2C;}.who-chip.vishnu .dot{background:#8A5A2C;}
+.who-chip.irshad{color:var(--irshad);}.who-chip.irshad .dot{background:var(--irshad);}
+.who-chip.azad{color:var(--azad);}.who-chip.azad .dot{background:var(--azad);}
+.who-chip.vishnu{color:var(--vishnu);}.who-chip.vishnu .dot{background:var(--vishnu);}
 .total-row td{font-weight:700;border-top:2px double var(--ink);border-bottom:none;padding-top:12px;}
-.empty-state{text-align:center;padding:30px;color:var(--ink-soft);font-size:13.5px;}
-.sync-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--emerald-tint);color:var(--emerald-dark);padding:4px 10px;border-radius:20px;font-weight:600;}
-.sync-dot{width:7px;height:7px;background:var(--emerald);border-radius:50%;animation:pulse 2s infinite;}
-@keyframes pulse{0%{opacity:1;}50%{opacity:0.4;}100%{opacity:1;}}
+.empty-state{text-align:center;padding:34px 20px;color:var(--ink-soft);font-size:13.5px;}
+.empty-state .big{font-size:28px;display:block;margin-bottom:8px;}
+
+/* ============ HISTORY ACCORDION ============ */
+.hist-item{border:1px solid var(--rule);border-radius:9px;margin-bottom:10px;overflow:hidden;background:var(--paper-raised);}
+.hist-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;cursor:pointer;gap:14px;flex-wrap:wrap;}
+.hist-head:hover{background:var(--paper);}
+.hist-title{font-weight:600;font-size:14px;}
+.hist-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+.hist-right{display:flex;align-items:center;gap:14px;}
+.hist-total{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;}
+.hist-body{display:none;padding:0 18px 18px;border-top:1px solid var(--rule);}
+.hist-item.open .hist-body{display:block;}
+.chev{transition:transform .2s;color:var(--ink-soft);}
+.hist-item.open .chev{transform:rotate(180deg);}
+.settlement-line{background:var(--emerald-tint);border:1px solid var(--emerald);border-radius:8px;padding:12px 14px;margin-top:14px;font-size:13.5px;color:var(--emerald-dark);font-weight:600;}
+
+/* ============ MODAL ============ */
+.modal-backdrop{position:fixed;inset:0;background:rgba(18,32,41,0.55);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal-backdrop.show{display:flex;}
+.modal{background:var(--paper-raised);border-radius:14px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-height:88vh;overflow-y:auto;}
+.modal-head{padding:20px 22px 0;}
+.modal-head h3{margin:0 0 4px;font-size:18px;}
+.modal-head p{margin:0;color:var(--ink-soft);font-size:13px;}
+.modal-body{padding:18px 22px;}
+.modal-foot{padding:14px 22px 20px;display:flex;gap:10px;justify-content:flex-end;border-top:1px solid var(--rule);margin-top:6px;}
+
+/* ============ TABS (dashboard sub-nav) ============ */
+.subtabs{display:flex;gap:6px;margin-bottom:18px;background:var(--paper-raised);border:1px solid var(--rule);border-radius:9px;padding:4px;width:fit-content;}
+.subtab{padding:8px 15px;border-radius:6px;border:none;background:none;font-weight:600;font-size:13px;color:var(--ink-soft);}
+.subtab.active{background:var(--ink);color:#fff;}
+
+.chart-wrap{position:relative;height:320px;padding:18px;}
+.grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
+@media (max-width:980px){.grid-2{grid-template-columns:1fr;}.widgets{grid-template-columns:1fr 1fr;}}
+@media (max-width:760px){
+  .sidebar{transform:translateX(-100%);}
+  .sidebar.open{transform:translateX(0);}
+  .menu-toggle{display:flex;}
+  .main{margin-left:0;padding:80px 16px 60px;}
+  .widgets{grid-template-columns:1fr 1fr;}
+  .form-row,.form-row.three{grid-template-columns:1fr;}
+}
+
+.info-note{background:var(--brass-tint);border:1px solid var(--brass);color:#6B4E17;border-radius:8px;padding:12px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.5;}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:9px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow);z-index:200;display:none;}
-.toast.show{display:block;}
+.toast.show{display:block;animation:fade .2s ease;}
+.conn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
+.conn-dot.ok{background:#3EA574;}
+.conn-dot.bad{background:var(--rose);}
 </style>
 </head>
 <body>
 
-<div class="container">
-  <div class="brand">
-    <div class="brand-left">
-      <div class="brand-mark">M</div>
+<button class="menu-toggle" id="menuToggle">☰</button>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">IA</div>
       <div>
         <div class="brand-name">The Mess Ledger</div>
-        <div class="brand-sub">Irshad &amp; Azad Shared Room</div>
+        <div class="brand-sub">Irshad &amp; Azad</div>
       </div>
     </div>
-    <div class="sync-badge"><span class="sync-dot"></span>Live Synced</div>
-  </div>
-
-  <!-- Top 2 Widgets as previously requested -->
-  <div class="widgets">
-    <div class="widget">
-      <div class="widget-label">Net Total You Owe</div>
-      <div class="widget-value mono" id="netTotalOwe">BHD 0.000</div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-view="vishnu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+        Vishnu's Tab
+      </button>
+      <button class="nav-item" data-view="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 3"/></svg>
+        History
+      </button>
+      <button class="nav-item" data-view="reports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        Reports
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="cycle-pill" id="sidebarCycle"><span class="conn-dot bad" id="connDot"></span><span id="connText">Connecting…</span></div>
+      <button class="settings-btn" id="settingsBtn">⚙ Connection settings</button>
+      <div class="credit">Irshad Himzan © 2026</div>
     </div>
-    <div class="widget">
-      <div class="widget-label">Active Records</div>
-      <div class="widget-value mono" id="activeRecordsCount">0 records</div>
-    </div>
-  </div>
+  </aside>
 
-  <!-- Add Expense Card -->
-  <div class="card">
-    <div class="card-head"><h3>Add Room / Mess Expense</h3></div>
-    <div class="card-body">
-      <div class="form-row">
-        <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="mAmount" placeholder="0.000"></div>
-        <div><label>Date</label><input type="date" id="mDate"></div>
-      </div>
-      <div class="form-row">
-        <div><label>Paid By</label>
-          <select id="mPaidBy">
-            <option value="irshad">Irshad</option>
-            <option value="azad">Azad</option>
-          </select>
+  <main class="main">
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="view active" id="view-dashboard">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow" id="cycleLabel">Cycle</div>
+          <h1>Current Cycle</h1>
+          <p id="cycleDates">—</p>
         </div>
-        <div><label>Description</label><input type="text" id="mDesc" placeholder="e.g. Groceries, Vegetables, Gas"></div>
+        <button class="btn btn-emerald" id="openSettleBtn">Settle This Cycle →</button>
       </div>
-      <button class="btn btn-primary" id="addExpenseBtn">+ Add Expense</button>
-    </div>
-  </div>
 
-  <!-- Vishnu's Tab Manager (Integrated in Interface with previous menu look) -->
-  <div class="card">
-    <div class="card-head"><h3>Log What Vishnu Spent / Paid</h3></div>
-    <div class="card-body">
-      <div class="form-row">
-        <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="vAmount" placeholder="0.000"></div>
-        <div><label>Date</label><input type="date" id="vDate"></div>
+      <div class="widgets">
+        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent</div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
+        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
+        <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
+        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
       </div>
-      <div class="form-row">
-        <div><label>Assign To / Related To</label>
-          <select id="vPaidBy">
-            <option value="house">General House / Both</option>
-            <option value="irshad">Irshad</option>
-            <option value="azad">Azad</option>
-            <option value="azad-add">Paid by Azad (Added to Vishnu Tab)</option>
-            <option value="irshad-add">Paid by Irshad (Added to Vishnu Tab)</option>
-          </select>
+
+      <div class="card">
+        <div class="card-head"><h3>Add an Expense</h3></div>
+        <div class="card-body">
+          <label>Who paid?</label>
+          <div class="person-toggle" style="margin-bottom:14px;">
+            <button type="button" class="person-btn sel-irshad" id="pickIrshad" onclick="setPayer('irshad')"><span class="dot"></span>Irshad</button>
+            <button type="button" class="person-btn" id="pickAzad" onclick="setPayer('azad')"><span class="dot"></span>Azad</button>
+          </div>
+          <div class="form-row three">
+            <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="expAmount" placeholder="0.000"></div>
+            <div><label>Date</label><input type="date" id="expDate"></div>
+            <div><label>Category</label>
+              <select id="expCategory">
+                <option>Groceries</option><option>Vegetables</option><option>Gas / LPG</option>
+                <option>Utilities</option><option>Cleaning</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr;">
+            <div><label>Description</label><input type="text" id="expDesc" placeholder="e.g. Lulu grocery run — rice, oil, veggies"></div>
+          </div>
+          <button class="btn btn-primary" id="addExpenseBtn">＋ Add Expense</button>
         </div>
-        <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Bought groceries"></div>
       </div>
-      <div style="margin-top:12px; display:flex; align-items:center; gap:8px;">
-        <input type="checkbox" id="addToMess" checked style="width:auto;">
-        <label for="addToMess" style="display:inline; margin:0; text-transform:none; font-weight:normal;">Also add this as a regular expense spend for the chosen person in the main room ledger</label>
+
+      <div class="card">
+        <div class="card-head"><h3>This Cycle's Entries</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="entryCount">0 entries</span></div>
+        <div class="card-body" style="padding:0;">
+          <div id="expenseTableWrap"></div>
+        </div>
       </div>
-      <br>
-      <button class="btn btn-primary" id="addVishnuItemBtn">💾 Save Vishnu Spend / Payment</button>
+    </section>
+
+    <!-- ============ VISHNU ============ -->
+    <section class="view" id="view-vishnu">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Shared with a friend</div>
+          <h1>Vishnu's Tab</h1>
+          <p>Items bought together with our order, that Vishnu reimburses separately — kept apart from the roommate split.</p>
+        </div>
+        <button class="btn btn-emerald" id="openVishnuSettleBtn">Settle with Vishnu →</button>
+      </div>
+
+      <div class="info-note">These entries never enter the Irshad/Azad monthly split. Link any item below to your personal bill if it was included in your total checkout, so your payment gets credited properly[cite: 1, 4].</div>
+
+      <div class="widgets" style="grid-template-columns:repeat(3,1fr);">
+        <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu Owes (Total)</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
+        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Paid by Irshad</div><div class="widget-value mono" id="vIrshad">BHD 0.000</div></div>
+        <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Paid by Azad</div><div class="widget-value mono" id="vAzad">BHD 0.000</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Add Vishnu Item</h3></div>
+        <div class="card-body">
+          <label>Who paid for it?</label>
+          <div class="person-toggle" style="margin-bottom:14px;">
+            <button type="button" class="person-btn sel-irshad" id="vPickIrshad" onclick="setVishnuPayer('irshad')"><span class="dot"></span>Irshad</button>
+            <button type="button" class="person-btn" id="vPickAzad" onclick="setVishnuPayer('azad')"><span class="dot"></span>Azad</button>
+          </div>
+          <div class="form-row three">
+            <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="vAmount" placeholder="0.000"></div>
+            <div><label>Date</label><input type="date" id="vDate"></div>
+            <div><label>Link to Personal Bill?</label>
+              <select id="vIncludeInBill">
+                <option value="no">No (Separate payment)</option>
+                <option value="yes">Yes (Included in my bill total)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr;">
+            <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Shared Amazon order or item in bill"></div>
+          </div>
+          <button class="btn btn-primary" id="addVishnuBtn">＋ Add Item</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Outstanding Items</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="vEntryCount">0 entries</span></div>
+        <div class="card-body" style="padding:0;">
+          <div id="vishnuTableWrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="view" id="view-history">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Permanent record</div>
+          <h1>History</h1>
+          <p>Every settled cycle and Vishnu settlement, kept forever for comparison.</p>
+        </div>
+      </div>
+      <div class="subtabs">
+        <button class="subtab active" data-hist="cycles" onclick="switchHistTab('cycles')">Monthly Cycles</button>
+        <button class="subtab" data-hist="vishnu" onclick="switchHistTab('vishnu')">Vishnu Settlements</button>
+      </div>
+      <div id="histCyclesWrap"></div>
+      <div id="histVishnuWrap" style="display:none;"></div>
+    </section>
+
+    <!-- ============ REPORTS ============ -->
+    <section class="view" id="view-reports">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Trends</div>
+          <h1>Reports</h1>
+          <p>Compare monthly totals to plan ahead.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Monthly Total — Irshad vs Azad</h3></div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Overall Trend</h3></div>
+        <div class="chart-wrap"><canvas id="chartTrend"></canvas></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ SETTLE MODAL ============ -->
+<div class="modal-backdrop" id="settleModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Settle This Cycle</h3><p>Review the split below, then confirm once cash has changed hands.</p></div>
+    <div class="modal-body" id="settleModalBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('settleModal')">Cancel</button>
+      <button class="btn btn-emerald" id="confirmSettleBtn">✓ Payment Received — Close Cycle</button>
     </div>
   </div>
+</div>
 
-  <!-- Main Room Expenses Table -->
-  <div class="card">
-    <div class="card-head"><h3>Room Expense Log</h3></div>
-    <div class="card-body" style="padding:0;">
-      <div id="expenseTableWrap"></div>
+<div class="modal-backdrop" id="vishnuSettleModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Settle with Vishnu</h3><p>Confirm once Vishnu has reimbursed the outstanding amount.</p></div>
+    <div class="modal-body" id="vishnuSettleModalBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('vishnuSettleModal')">Cancel</button>
+      <button class="btn btn-emerald" id="confirmVishnuSettleBtn">✓ Cash Received — Close Tab</button>
     </div>
   </div>
+</div>
 
-  <!-- Vishnu Tab Log -->
-  <div class="card">
-    <div class="card-head"><h3>Ledger Summary (Debits &amp; Credits)</h3></div>
-    <div class="card-body" style="padding:0;">
-      <div id="vishnuTableWrap"></div>
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <div class="modal-head"><h3>Connection Settings</h3><p>Paste your shared Firebase project keys so both phones sync to the same data. Do this once per device — see README for setup.</p></div>
+    <div class="modal-body">
+      <div class="form-row" style="grid-template-columns:1fr;">
+        <div><label>API Key</label><input type="text" id="cfgApiKey"></div>
+        <div><label>Auth Domain</label><input type="text" id="cfgAuthDomain"></div>
+        <div><label>Project ID</label><input type="text" id="cfgProjectId"></div>
+        <div><label>Storage Bucket</label><input type="text" id="cfgStorageBucket"></div>
+        <div><label>Messaging Sender ID</label><input type="text" id="cfgSenderId"></div>
+        <div><label>App ID</label><input type="text" id="cfgAppId"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('settingsModal')">Cancel</button>
+      <button class="btn btn-primary" id="saveConfigBtn">Save &amp; Connect</button>
     </div>
   </div>
 </div>
@@ -164,218 +443,529 @@ tr:last-child td{border-bottom:none;}
 <div class="toast" id="toast"></div>
 
 <script>
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAON8q9X1QzO3usFHDut63qXfl7QglauMg",
-  authDomain: "the-mess-ledger.firebaseapp.com",
-  projectId: "the-mess-ledger",
-  storageBucket: "the-mess-ledger.firebasestorage.app",
-  messagingSenderId: "156636852771",
-  appId: "1:156636852771:web:cfb333ec4f5f7bef16f796"
-};
+/* ======================================================================
+   THE MESS LEDGER — Irshad & Azad
+   Irshad Himzan © 2026
+   Shared, real-time expense splitter with a permanent Firestore history.
+====================================================================== */
 
-try {
-  firebase.initializeApp(FIREBASE_CONFIG);
-} catch(e) { console.error(e); }
+let db = null;
+let app = null;
+let currentPayer = 'irshad';
+let currentVishnuPayer = 'irshad';
+let liveExpenses = [];
+let liveVishnu = [];
+let cycleHistoryCache = [];
+let vishnuHistoryCache = [];
 
-const db = firebase.firestore();
 const CURRENCY = 'BHD';
 const fmt = (n) => `${CURRENCY} ${(Number(n)||0).toFixed(3)}`;
-function fmtDate(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+
+/* ---------------- Cycle helpers ---------------- */
+function cycleKeyFor(d = new Date()){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function cycleRangeFor(key){
+  const [y,m] = key.split('-').map(Number);
+  const start = new Date(y, m-1, 1);
+  const end = new Date(y, m, 0);
+  return {start, end};
+}
+function fmtDate(d){
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+}
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
-document.getElementById('mDate').value = todayISO();
-document.getElementById('vDate').value = todayISO();
+let CURRENT_CYCLE = cycleKeyFor();
 
-// Listen to Main Expenses
-db.collection('expenses').onSnapshot(snap => {
-  let items = [];
-  snap.forEach(doc => items.push({id: doc.id, ...doc.data()}));
-  items.sort((a,b) => (a.date < b.date ? 1 : -1));
-  renderExpenses(items);
-}, err => { console.error(err); });
-
-// Listen to Vishnu Expenses
-db.collection('vishnuExpenses').where('settled','==',false).onSnapshot(snap => {
-  let items = [];
-  snap.forEach(doc => items.push({id: doc.id, ...doc.data()}));
-  items.sort((a,b) => (a.date < b.date ? 1 : -1));
-  renderVishnuTab(items);
-}, err => { console.error(err); });
-
-// Add Room Expense
-document.getElementById('addExpenseBtn').addEventListener('click', async () => {
-  const amount = parseFloat(document.getElementById('mAmount').value);
-  const date = document.getElementById('mDate').value || todayISO();
-  const paidBy = document.getElementById('mPaidBy').value;
-  const description = document.getElementById('mDesc').value.trim() || 'Room Expense';
-
-  if(!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
-
-  await db.collection('expenses').add({
-    amount, date, paidBy, description,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
-
-  document.getElementById('mAmount').value = '';
-  document.getElementById('mDesc').value = '';
-  showToast('Expense added successfully.');
-});
-
-// Add Vishnu Item / Spend
-document.getElementById('addVishnuItemBtn').addEventListener('click', async () => {
-  const amount = parseFloat(document.getElementById('vAmount').value);
-  const date = document.getElementById('vDate').value || todayISO();
-  const selection = document.getElementById('vPaidBy').value;
-  const description = document.getElementById('vDesc').value.trim() || 'Shared item';
-  const addToMess = document.getElementById('addToMess').checked;
-
-  if(!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
-
-  if(selection === 'azad-add' || selection === 'irshad-add') {
-    let actualPayer = selection.replace('-add', '');
-    await db.collection('vishnuExpenses').add({
-      amount: Math.abs(amount), 
-      date, 
-      paidBy: actualPayer, 
-      description, 
-      settled: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    showToast("Added to Vishnu's Tab.");
-  } else {
-    // Vishnu spent for house / irshad / azad
-    let target = selection;
-    
-    // 1. Add negative credit entry to vishnuExpenses
-    await db.collection('vishnuExpenses').add({
-      paidBy: 'vishnu',
-      target: target,
-      amount: -Math.abs(amount), 
-      date,
-      description: `[Vishnu Paid] ${description} (${target})`,
-      settled: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    // 2. If checked, sync to main room expenses ledger
-    if(addToMess && (target === 'irshad' || target === 'azad')) {
-      await db.collection('expenses').add({
-        paidBy: target,
-        amount: Math.abs(amount),
-        date,
-        description: `[Paid via Vishnu] ${description}`,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    } else if(addToMess && target === 'house') {
-      let half = Math.abs(amount) / 2;
-      await db.collection('expenses').add({
-        paidBy: 'irshad',
-        amount: half,
-        date,
-        description: `[House/Vishnu Split] ${description}`,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      await db.collection('expenses').add({
-        paidBy: 'azad',
-        amount: half,
-        date,
-        description: `[House/Vishnu Split] ${description}`,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-    showToast('Vishnu spend recorded and synced.');
-  }
-
-  document.getElementById('vAmount').value = '';
-  document.getElementById('vDesc').value = '';
-});
-
-async function deleteExpense(id){
-  if(confirm('Delete this expense?')) {
-    await db.collection('expenses').doc(id).delete();
-    showToast('Expense deleted.');
-  }
+/* ---------------- Firebase config persistence ---------------- */
+function getSavedConfig(){
+  try{ return JSON.parse(localStorage.getItem('ledger_fb_config')||'null'); }catch(e){ return null; }
 }
+function saveConfig(cfg){ localStorage.setItem('ledger_fb_config', JSON.stringify(cfg)); }
 
-async function deleteVishnuItem(id){
-  if(confirm('Delete this item?')) {
-    await db.collection('vishnuExpenses').doc(id).delete();
-    showToast('Item removed.');
-  }
-}
-
-function renderExpenses(items){
-  let total = 0, irshad = 0, azad = 0;
-  items.forEach(e => {
-    let amt = Number(e.amount);
-    total += amt;
-    if(e.paidBy === 'irshad') irshad += amt;
-    if(e.paidBy === 'azad') azad += amt;
-  });
-
-  const wrap = document.getElementById('expenseTableWrap');
-  if(items.length === 0){
-    wrap.innerHTML = `<div class="empty-state">No room expenses logged yet.</div>`;
+function initFirebase(){
+  const cfg = getSavedConfig();
+  const dot = document.getElementById('connDot');
+  const txt = document.getElementById('connText');
+  if(!cfg || !cfg.apiKey){
+    dot.className = 'conn-dot bad';
+    txt.textContent = 'Not connected — open settings';
+    openModal('settingsModal');
     return;
   }
+  try{
+    app = firebase.initializeApp(cfg);
+    db = firebase.firestore();
+    dot.className = 'conn-dot ok';
+    txt.textContent = 'Synced live';
+    attachListeners();
+  }catch(e){
+    dot.className = 'conn-dot bad';
+    txt.textContent = 'Connection failed';
+    console.error(e);
+    showToast('Could not connect — check your keys in settings.');
+  }
+}
 
-  let rows = items.map(e => `
+/* ---------------- Realtime listeners ---------------- */
+function attachListeners(){
+  db.collection('expenses').where('archived','==',false)
+    .onSnapshot(snap=>{
+      liveExpenses = [];
+      snap.forEach(doc=> liveExpenses.push({id:doc.id, ...doc.data()}));
+      liveExpenses.sort((a,b)=> (a.date < b.date ? 1 : -1));
+      renderDashboard();
+    }, err=>{ console.error(err); showToast('Sync error — check Firestore rules.'); });
+
+  db.collection('vishnuExpenses').where('settled','==',false)
+    .onSnapshot(snap=>{
+      liveVishnu = [];
+      snap.forEach(doc=> liveVishnu.push({id:doc.id, ...doc.data()}));
+      liveVishnu.sort((a,b)=> (a.date < b.date ? 1 : -1));
+      renderDashboard(); // Re-render dashboard since linked vishnu bills affect totals
+      renderVishnu();
+    }, err=> console.error(err));
+
+  db.collection('cycleHistory').orderBy('cycleKey','desc')
+    .onSnapshot(snap=>{
+      cycleHistoryCache = [];
+      snap.forEach(doc=> cycleHistoryCache.push({id:doc.id, ...doc.data()}));
+      renderHistoryCycles();
+      renderCharts();
+    }, err=> console.error(err));
+
+  db.collection('vishnuHistory').orderBy('settledAt','desc')
+    .onSnapshot(snap=>{
+      vishnuHistoryCache = [];
+      snap.forEach(doc=> vishnuHistoryCache.push({id:doc.id, ...doc.data()}));
+      renderHistoryVishnu();
+    }, err=> console.error(err));
+}
+
+/* ---------------- Dashboard ---------------- */
+function renderDashboard(){
+  const {start,end} = cycleRangeFor(CURRENT_CYCLE);
+  document.getElementById('cycleDates').textContent = `${fmtDate(start)} → ${fmtDate(end)}`;
+  const today = new Date();
+  const daysLeft = Math.max(0, Math.ceil((end - today)/86400000)+1);
+  document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
+
+  // Calculate direct expenses + any Vishnu items explicitly included in personal bills
+  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
+
+  liveVishnu.forEach(v => {
+    if(v.includeInBill === 'yes') {
+      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
+      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
+    }
+  });
+
+  const total = irshadTotal + azadTotal;
+
+  document.getElementById('wTotal').textContent = fmt(total);
+  document.getElementById('wIrshad').textContent = fmt(irshadTotal);
+  document.getElementById('wAzad').textContent = fmt(azadTotal);
+  document.getElementById('wIrshadCount').textContent = `${liveExpenses.filter(e=>e.person==='irshad').length} entries`;
+  document.getElementById('wAzadCount').textContent = `${liveExpenses.filter(e=>e.person==='azad').length} entries`;
+  document.getElementById('entryCount').textContent = `${liveExpenses.length} entries`;
+
+  const half = total/2;
+  const diff = irshadTotal - half; // positive => azad owes irshad
+  const card = document.getElementById('wBalanceCard');
+  const valEl = document.getElementById('wBalance');
+  const subEl = document.getElementById('wBalanceSub');
+  if(total === 0 || Math.abs(diff) < 0.0005){
+    card.className = 'widget balance settled';
+    valEl.textContent = 'Settled';
+    subEl.textContent = total===0 ? 'No expenses logged yet' : 'Equal contribution so far';
+  } else if(diff > 0){
+    card.className = 'widget balance owed';
+    valEl.textContent = fmt(diff);
+    subEl.textContent = 'Azad owes Irshad';
+  } else {
+    card.className = 'widget balance owed';
+    valEl.textContent = fmt(-diff);
+    subEl.textContent = 'Irshad owes Azad';
+  }
+
+  renderExpenseTable();
+}
+
+function renderExpenseTable(){
+  const wrap = document.getElementById('expenseTableWrap');
+  if(liveExpenses.length===0){
+    wrap.innerHTML = `<div class="empty-state"><span class="big">🧾</span>No entries yet this cycle.<br>Add the first grocery run above.</div>`;
+    return;
+  }
+  let rows = liveExpenses.map(e=>`
     <tr>
       <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy === 'irshad' ? 'Irshad' : 'Azad'}</span></td>
-      <td>${e.description}</td>
+      <td><span class="who-chip ${e.person}"><span class="dot"></span>${e.person==='irshad'?'Irshad':'Azad'}</span></td>
+      <td>${escapeHtml(e.description||'')} <span style="color:var(--ink-soft);font-size:11.5px;">· ${escapeHtml(e.category||'')}</span></td>
       <td class="num">${fmt(e.amount)}</td>
-      <td style="text-align:right;"><button class="btn btn-danger" onclick="deleteExpense('${e.id}')">Remove</button></td>
+      <td><button class="btn-danger-text" onclick="deleteExpense('${e.id}')">Remove</button></td>
     </tr>`).join('');
-
-  wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Paid By</th><th>Description</th><th class="num">Amount</th><th style="text-align:right;">Action</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
-}
-
-function renderVishnuTab(items){
-  let totalOwes = items.reduce((sum, item) => sum + Number(item.amount), 0);
   
-  // Update top widgets to match exact previous layout
-  document.getElementById('netTotalOwe').textContent = fmt(totalOwes);
-  document.getElementById('activeRecordsCount').textContent = `${items.length} records`;
-
-  const wrap = document.getElementById('vishnuTableWrap');
-  if(items.length === 0){
-    wrap.innerHTML = `<div class="empty-state">No active entries in Vishnu's tab.</div>`;
-    return;
-  }
-
-  let rows = items.map(e => {
-    let isCredit = Number(e.amount) < 0;
-    let typeLabel = '';
-    if(e.paidBy === 'vishnu') {
-      typeLabel = `<span class="who-chip vishnu"><span class="dot"></span>Vishnu Paid</span>`;
-    } else {
-      typeLabel = `<span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy === 'irshad' ? 'Irshad' : 'Azad'} paid</span>`;
+  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  liveVishnu.forEach(v => {
+    if(v.includeInBill === 'yes') {
+      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
+      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
     }
-    return `
-      <tr>
-        <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-        <td>${typeLabel}</td>
-        <td>${e.description}</td>
-        <td class="num" style="color:${isCredit ? 'var(--emerald)' : 'inherit'};">${fmt(e.amount)}</td>
-        <td style="text-align:right;"><button class="btn btn-danger" onclick="deleteVishnuItem('${e.id}')">Remove</button></td>
-      </tr>`;
-  }).join('');
+  });
+  const total = irshadTotal + azadTotal;
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th><th style="text-align:right;">Action</th></tr></thead>
+    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(totalOwes)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">Cycle Total (incl. linked bills)</td><td class="num">${fmt(total)}</td><td></td></tr>
     </tbody></table>`;
 }
 
+function setPayer(p){
+  currentPayer = p;
+  document.getElementById('pickIrshad').className = 'person-btn' + (p==='irshad' ? ' sel-irshad':'');
+  document.getElementById('pickAzad').className = 'person-btn' + (p==='azad' ? ' sel-azad':'');
+}
+
+async function addExpense(){
+  if(!db) return showToast('Connect Firebase first — open settings.');
+  const amount = parseFloat(document.getElementById('expAmount').value);
+  const date = document.getElementById('expDate').value || todayISO();
+  const category = document.getElementById('expCategory').value;
+  const description = document.getElementById('expDesc').value.trim();
+  if(!amount || amount<=0) return showToast('Enter a valid amount.');
+  await db.collection('expenses').add({
+    person: currentPayer, amount, date, category, description,
+    cycleKey: CURRENT_CYCLE, archived:false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  document.getElementById('expAmount').value='';
+  document.getElementById('expDesc').value='';
+  showToast('Expense added.');
+}
+
+async function deleteExpense(id){
+  if(!confirm('Remove this entry?')) return;
+  await db.collection('expenses').doc(id).delete();
+}
+
+/* ---------------- Settle cycle ---------------- */
+function openSettleModal(){
+  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  liveVishnu.forEach(v => {
+    if(v.includeInBill === 'yes') {
+      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
+      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
+    }
+  });
+  const total = irshadTotal + azadTotal;
+  if(total===0){ showToast('No expenses to settle yet.'); return; }
+  const half = total/2;
+  const diff = irshadTotal - half;
+  let settleLine;
+  if(Math.abs(diff)<0.0005){ settleLine = `Already settled — both paid an equal share.`; }
+  else if(diff>0){ settleLine = `Azad pays Irshad <b>${fmt(diff)}</b>`; }
+  else { settleLine = `Irshad pays Azad <b>${fmt(-diff)}</b>`; }
+
+  document.getElementById('settleModalBody').innerHTML = `
+    <div class="form-row" style="grid-template-columns:1fr 1fr;margin-bottom:4px;">
+      <div><label>Irshad Spent (incl. linked)</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadTotal)}</div></div>
+      <div><label>Azad Spent (incl. linked)</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadTotal)}</div></div>
+    </div>
+    <div style="margin-top:10px;"><label>Total Cycle Expense</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
+    <div class="settlement-line">${settleLine}</div>
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming will archive all entries to History and start a fresh cycle.</p>
+  `;
+  openModal('settleModal');
+}
+
+async function confirmSettle(){
+  let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  liveVishnu.forEach(v => {
+    if(v.includeInBill === 'yes') {
+      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
+      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
+    }
+  });
+  const total = irshadTotal + azadTotal;
+  const half = total/2;
+  const diff = irshadTotal - half;
+  let settlement = null;
+  if(Math.abs(diff)>=0.0005){
+    settlement = diff>0 ? {owedBy:'azad', owedTo:'irshad', amount:+diff.toFixed(3)} : {owedBy:'irshad', owedTo:'azad', amount:+(-diff).toFixed(3)};
+  }
+  const {start,end} = cycleRangeFor(CURRENT_CYCLE);
+  const snapshotExpenses = liveExpenses.map(e=>({person:e.person, amount:e.amount, description:e.description, category:e.category||'', date:e.date}));
+
+  await db.collection('cycleHistory').doc(CURRENT_CYCLE).set({
+    cycleKey: CURRENT_CYCLE,
+    startDate: start.toISOString().slice(0,10),
+    endDate: end.toISOString().slice(0,10),
+    totalExpense: total, irshadTotal, azadTotal,
+    settlement, expenses: snapshotExpenses,
+    settledAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  const batch = db.batch();
+  liveExpenses.forEach(e=> batch.update(db.collection('expenses').doc(e.id), {archived:true}));
+  await batch.commit();
+
+  closeModal('settleModal');
+  showToast('Cycle settled and archived. Fresh cycle started 🎉');
+}
+
+/* ---------------- Vishnu ---------------- */
+function setVishnuPayer(p){
+  currentVishnuPayer = p;
+  document.getElementById('vPickIrshad').className = 'person-btn' + (p==='irshad' ? ' sel-irshad':'');
+  document.getElementById('vPickAzad').className = 'person-btn' + (p==='azad' ? ' sel-azad':'');
+}
+
+function renderVishnu(){
+  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  document.getElementById('vTotal').textContent = fmt(irshadV+azadV);
+  document.getElementById('vIrshad').textContent = fmt(irshadV);
+  document.getElementById('vAzad').textContent = fmt(azadV);
+  document.getElementById('vCount').textContent = `${liveVishnu.length} entries`;
+  document.getElementById('vEntryCount').textContent = `${liveVishnu.length} entries`;
+
+  const wrap = document.getElementById('vishnuTableWrap');
+  if(liveVishnu.length===0){
+    wrap.innerHTML = `<div class="empty-state"><span class="big">🤝</span>Nothing on Vishnu's tab right now.</div>`;
+    return;
+  }
+  let rows = liveVishnu.map(e=>`
+    <tr>
+      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy==='irshad'?'Irshad':'Azad'} paid</span></td>
+      <td>${escapeHtml(e.description||'')} ${e.includeInBill==='yes' ? '<span style="font-size:11px;background:var(--brass-tint);padding:2px 6px;border-radius:4px;color:var(--brass);">Linked to bill</span>':''}</td>
+      <td class="num">${fmt(e.amount)}</td>
+      <td><button class="btn-danger-text" onclick="deleteVishnu('${e.id}')">Remove</button></td>
+    </tr>`).join('');
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>${rows}
+      <tr class="total-row"><td colspan="3">Vishnu Owes</td><td class="num">${fmt(irshadV+azadV)}</td><td></td></tr>
+    </tbody></table>`;
+}
+
+async function addVishnu(){
+  if(!db) return showToast('Connect Firebase first — open settings.');
+  const amount = parseFloat(document.getElementById('vAmount').value);
+  const date = document.getElementById('vDate').value || todayISO();
+  const description = document.getElementById('vDesc').value.trim();
+  const includeInBill = document.getElementById('vIncludeInBill').value;
+  if(!amount || amount<=0) return showToast('Enter a valid amount.');
+  await db.collection('vishnuExpenses').add({
+    paidBy: currentVishnuPayer, amount, date, description, includeInBill, settled:false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  document.getElementById('vAmount').value='';
+  document.getElementById('vDesc').value='';
+  showToast('Added to Vishnu\'s tab.');
+}
+async function deleteVishnu(id){
+  if(!confirm('Remove this entry?')) return;
+  await db.collection('vishnuExpenses').doc(id).delete();
+}
+
+function openVishnuSettleModal(){
+  if(liveVishnu.length===0){ showToast('Nothing to settle yet.'); return; }
+  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  document.getElementById('vishnuSettleModalBody').innerHTML = `
+    <div class="form-row" style="grid-template-columns:1fr 1fr;">
+      <div><label>Paid by Irshad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadV)}</div></div>
+      <div><label>Paid by Azad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadV)}</div></div>
+    </div>
+    <div style="margin-top:10px;"><label>Vishnu Owes (Total)</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(irshadV+azadV)}</div></div>
+    <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming archives these ${liveVishnu.length} entries to History and clears the tab.</p>
+  `;
+  openModal('vishnuSettleModal');
+}
+
+async function confirmVishnuSettle(){
+  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
+  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  const snapshotExpenses = liveVishnu.map(e=>({paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date, includeInBill:e.includeInBill}));
+  await db.collection('vishnuHistory').add({
+    total: irshadV+azadV, paidByIrshad: irshadV, paidByAzad: azadV,
+    expenses: snapshotExpenses,
+    settledAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  const batch = db.batch();
+  liveVishnu.forEach(e=> batch.update(db.collection('vishnuExpenses').doc(e.id), {settled:true}));
+  await batch.commit();
+  closeModal('vishnuSettleModal');
+  showToast('Vishnu\'s tab settled and archived.');
+}
+
+/* ---------------- History ---------------- */
+function switchHistTab(tab){
+  document.querySelectorAll('.subtab').forEach(b=>b.classList.toggle('active', b.dataset.hist===tab));
+  document.getElementById('histCyclesWrap').style.display = tab==='cycles' ? 'block':'none';
+  document.getElementById('histVishnuWrap').style.display = tab==='vishnu' ? 'block':'none';
+}
+
+function renderHistoryCycles(){
+  const wrap = document.getElementById('histCyclesWrap');
+  if(cycleHistoryCache.length===0){
+    wrap.innerHTML = `<div class="card"><div class="empty-state"><span class="big">📚</span>No cycles settled yet. Once you close a cycle, it appears here forever.</div></div>`;
+    return;
+  }
+  wrap.innerHTML = cycleHistoryCache.map((c,i)=>{
+    const label = new Date(c.startDate).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+    let settleTxt = 'Split evenly — no balance owed';
+    if(c.settlement) settleTxt = `${c.settlement.owedBy==='azad'?'Azad':'Irshad'} paid ${c.settlement.owedTo==='irshad'?'Irshad':'Azad'} ${fmt(c.settlement.amount)}`;
+    const rows = (c.expenses||[]).map(e=>`
+      <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+      <td><span class="who-chip ${e.person}"><span class="dot"></span>${e.person==='irshad'?'Irshad':'Azad'}</span></td>
+      <td>${escapeHtml(e.description||'')}</td><td class="num">${fmt(e.amount)}</td></tr>`).join('');
+    return `<div class="hist-item" id="hc-${c.id}">
+      <div class="hist-head" onclick="toggleHist('hc-${c.id}')">
+        <div><div class="hist-title">${label}</div><div class="hist-meta">${fmtDate(new Date(c.startDate))} – ${fmtDate(new Date(c.endDate))} · ${(c.expenses||[]).length} entries</div></div>
+        <div class="hist-right"><span class="hist-total mono">${fmt(c.totalExpense)}</span><span class="stamp settled"><span class="dot"></span>Settled</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      </div>
+      <div class="hist-body">
+        <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:14px;">
+          <div><label>Irshad Spent</label><div class="mono" style="font-weight:600;">${fmt(c.irshadTotal)}</div></div>
+          <div><label>Azad Spent</label><div class="mono" style="font-weight:600;">${fmt(c.azadTotal)}</div></div>
+        </div>
+        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="settlement-line">${settleTxt}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistoryVishnu(){
+  const wrap = document.getElementById('histVishnuWrap');
+  if(vishnuHistoryCache.length===0){
+    wrap.innerHTML = `<div class="card"><div class="empty-state"><span class="big">🤝</span>No Vishnu settlements yet.</div></div>`;
+    return;
+  }
+  wrap.innerHTML = vishnuHistoryCache.map(c=>{
+    const dt = c.settledAt && c.settledAt.toDate ? c.settledAt.toDate() : new Date();
+    const rows = (c.expenses||[]).map(e=>`
+      <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy==='irshad'?'Irshad':'Azad'} paid</span></td>
+      <td>${escapeHtml(e.description||'')}</td><td class="num">${fmt(e.amount)}</td></tr>`).join('');
+    return `<div class="hist-item" id="hv-${c.id}">
+      <div class="hist-head" onclick="toggleHist('hv-${c.id}')">
+        <div><div class="hist-title">Settled ${fmtDate(dt)}</div><div class="hist-meta">${(c.expenses||[]).length} entries</div></div>
+        <div class="hist-right"><span class="hist-total mono">${fmt(c.total)}</span><span class="stamp settled"><span class="dot"></span>Settled</span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>
+      </div>
+      <div class="hist-body">
+        <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:14px;">
+          <div><label>Paid by Irshad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByIrshad)}</div></div>
+          <div><label>Paid by Azad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByAzad)}</div></div>
+        </div>
+        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleHist(id){ document.getElementById(id).classList.toggle('open'); }
+
+/* ---------------- Charts ---------------- */
+let chartMonthly, chartTrend;
+function renderCharts(){
+  const sorted = [...cycleHistoryCache].sort((a,b)=> a.cycleKey.localeCompare(b.cycleKey));
+  const labels = sorted.map(c=> new Date(c.startDate).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}));
+  const irshadData = sorted.map(c=>c.irshadTotal);
+  const azadData = sorted.map(c=>c.azadTotal);
+  const totalData = sorted.map(c=>c.totalExpense);
+
+  const ctx1 = document.getElementById('chartMonthly').getContext('2d');
+  if(chartMonthly) chartMonthly.destroy();
+  chartMonthly = new Chart(ctx1, {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Irshad', data:irshadData, backgroundColor:'#1F6F54', borderRadius:4, maxBarThickness:26},
+      {label:'Azad', data:azadData, backgroundColor:'#2C5F8A', borderRadius:4, maxBarThickness:26}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom', labels:{font:{family:'Inter'}}}},
+      scales:{ y:{ticks:{callback:v=>CURRENCY+' '+v, font:{family:'IBM Plex Mono'}}, grid:{color:'#E4E0D2'}}, x:{grid:{display:false}}}
+    }
+  });
+
+  const ctx2 = document.getElementById('chartTrend').getContext('2d');
+  if(chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(ctx2, {
+    type:'line',
+    data:{ labels, datasets:[
+      {label:'Total Cycle Expense', data:totalData, borderColor:'#B4842A', backgroundColor:'rgba(180,132,42,0.12)', fill:true, tension:.3, pointRadius:4, pointBackgroundColor:'#B4842A'}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{ y:{ticks:{callback:v=>CURRENCY+' '+v, font:{family:'IBM Plex Mono'}}, grid:{color:'#E4E0D2'}}, x:{grid:{display:false}}}
+    }
+  });
+}
+
+/* ---------------- UI plumbing ---------------- */
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2600);
 }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.querySelectorAll('.nav-item').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    document.getElementById('sidebar').classList.remove('open');
+  });
+});
+document.getElementById('menuToggle').addEventListener('click', ()=> document.getElementById('sidebar').classList.toggle('open'));
+document.getElementById('addExpenseBtn').addEventListener('click', addExpense);
+document.getElementById('addVishnuBtn').addEventListener('click', addVishnu);
+document.getElementById('openSettleBtn').addEventListener('click', openSettleModal);
+document.getElementById('confirmSettleBtn').addEventListener('click', confirmSettle);
+document.getElementById('openVishnuSettleBtn').addEventListener('click', openVishnuSettleModal);
+document.getElementById('confirmVishnuSettleBtn').addEventListener('click', confirmVishnuSettle);
+document.getElementById('settingsBtn').addEventListener('click', ()=>{
+  const cfg = getSavedConfig() || {};
+  document.getElementById('cfgApiKey').value = cfg.apiKey||'';
+  document.getElementById('cfgAuthDomain').value = cfg.authDomain||'';
+  document.getElementById('cfgProjectId').value = cfg.projectId||'';
+  document.getElementById('cfgStorageBucket').value = cfg.storageBucket||'';
+  document.getElementById('cfgSenderId').value = cfg.messagingSenderId||'';
+  document.getElementById('cfgAppId').value = cfg.appId||'';
+  openModal('settingsModal');
+});
+document.getElementById('saveConfigBtn').addEventListener('click', ()=>{
+  const cfg = {
+    apiKey: document.getElementById('cfgApiKey').value.trim(),
+    authDomain: document.getElementById('cfgAuthDomain').value.trim(),
+    projectId: document.getElementById('cfgProjectId').value.trim(),
+    storageBucket: document.getElementById('cfgStorageBucket').value.trim(),
+    messagingSenderId: document.getElementById('cfgSenderId').value.trim(),
+    appId: document.getElementById('cfgAppId').value.trim()
+  };
+  if(!cfg.apiKey || !cfg.projectId){ showToast('Please fill in at least API Key and Project ID.'); return; }
+  saveConfig(cfg);
+  closeModal('settingsModal');
+  location.reload();
+});
+
+document.getElementById('expDate').value = todayISO();
+document.getElementById('vDate').value = todayISO();
+initFirebase();
 </script>
 </body>
 </html>

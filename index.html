@@ -284,10 +284,10 @@ tr:last-child td{border-bottom:none;}
       </div>
 
       <div class="widgets">
-        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent</div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
+        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent <span class="tag-badge split" id="wTotalNote" style="display:none;margin-left:4px;">excl. Vishnu</span></div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
-        <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu Spent</div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
+        <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
         <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
       </div>
 
@@ -441,6 +441,49 @@ tr:last-child td{border-bottom:none;}
           <p>Compare monthly totals to plan ahead.</p>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Download / Share Statement</h3></div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;">Pull a plain-text statement for any single day or date range — every mess expense, each person's paid amount, and the resulting balance for that period. Vishnu's share (if any) is shown separately, same as on the dashboard.</p>
+
+          <div class="subtabs" style="margin-bottom:16px;">
+            <button class="subtab active" data-stmt="range" onclick="setStatementMode('range')">Date Range</button>
+            <button class="subtab" data-stmt="day" onclick="setStatementMode('day')">Single Day</button>
+          </div>
+
+          <div class="form-row" id="stmtRangeRow">
+            <div><label>From</label><input type="date" id="stmtFrom"></div>
+            <div><label>To</label><input type="date" id="stmtTo"></div>
+          </div>
+          <div class="form-row" id="stmtDayRow" style="display:none;grid-template-columns:1fr;">
+            <div><label>Day</label><input type="date" id="stmtDay"></div>
+          </div>
+
+          <div class="form-row">
+            <div><label>Quick range</label>
+              <select id="stmtQuick" onchange="applyQuickRange()">
+                <option value="">Custom</option>
+                <option value="today">Today</option>
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="cycle">Current cycle so far</option>
+              </select>
+            </div>
+            <div><label>WhatsApp number (optional)</label><input type="text" id="stmtPhone" placeholder="e.g. 97333xxxxxx"></div>
+          </div>
+          <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 14px;">Leave the number blank to pick a chat when WhatsApp opens.</p>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-ghost" id="previewStmtBtn" onclick="previewStatement()">👁 Preview</button>
+            <button class="btn btn-primary" id="downloadStmtBtn" onclick="downloadStatement()">⬇ Download .txt</button>
+            <button class="btn btn-emerald" id="whatsappStmtBtn" onclick="sendStatementWhatsApp()">🟢 Send via WhatsApp</button>
+          </div>
+
+          <div id="stmtPreviewWrap" style="display:none;margin-top:16px;"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head"><h3>Monthly Total — Irshad vs Azad</h3></div>
         <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
@@ -658,6 +701,20 @@ function simplifyDebts(net){
   return txns;
 }
 
+// Vishnu is an outsider to the roommate split: whatever share of an expense
+// is his never counts toward "the total" that Irshad & Azad divide between
+// themselves. These two helpers carve that portion out.
+function computeVishnuShareTotal(list){
+  return list.reduce((sum,e)=>{
+    const {participants, splitAmounts} = expenseSplitInfo(e);
+    return sum + (participants.includes('vishnu') ? (Number(splitAmounts.vishnu)||0) : 0);
+  }, 0);
+}
+function computeMessTotal(list){
+  const grand = list.reduce((s,e)=>s+Number(e.amount||0),0);
+  return grand - computeVishnuShareTotal(list);
+}
+
 /* ---------------- Dashboard ---------------- */
 function renderDashboard(){
   const {start,end} = cycleRangeFor(CURRENT_CYCLE);
@@ -667,7 +724,8 @@ function renderDashboard(){
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
   const {net, spent} = computeNetBalances(liveExpenses);
-  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
+  const total = computeMessTotal(liveExpenses); // excludes Vishnu's share — this is what Irshad & Azad split
 
   document.getElementById('wTotal').textContent = fmt(total);
   document.getElementById('wIrshad').textContent = fmt(spent.irshad);
@@ -678,19 +736,21 @@ function renderDashboard(){
 
   const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
   document.getElementById('wVishnuWidget').style.display = vishnuInvolved ? '' : 'none';
+  document.getElementById('wTotalNote').style.display = vishnuShareTotal > 0.0005 ? '' : 'none';
   if(vishnuInvolved){
-    document.getElementById('wVishnu').textContent = fmt(spent.vishnu);
-    document.getElementById('wVishnuCount').textContent = `${liveExpenses.filter(e=>e.person==='vishnu').length} entries`;
+    document.getElementById('wVishnu').textContent = fmt(vishnuShareTotal);
+    const vCount = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu')).length;
+    document.getElementById('wVishnuCount').textContent = `${vCount} entries · not counted above`;
   }
 
   const card = document.getElementById('wBalanceCard');
   const valEl = document.getElementById('wBalance');
   const subEl = document.getElementById('wBalanceSub');
   const txns = simplifyDebts(net);
-  if(total === 0 || txns.length === 0){
+  if(liveExpenses.length === 0 || txns.length === 0){
     card.className = 'widget balance settled';
     valEl.textContent = 'Settled';
-    subEl.textContent = total===0 ? 'No expenses logged yet' : 'Everyone paid their share';
+    subEl.textContent = liveExpenses.length===0 ? 'No expenses logged yet' : 'Everyone paid their share';
   } else if(txns.length === 1){
     card.className = 'widget balance owed';
     valEl.textContent = fmt(txns[0].amount);
@@ -729,12 +789,16 @@ function renderExpenseTable(){
     </tr>`;
   }).join('');
 
-  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const total = computeMessTotal(liveExpenses);
+  const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
+  const totalLabel = vishnuShareTotal > 0.0005
+    ? `Cycle Total <span style="font-weight:500;font-size:11px;color:var(--ink-soft);">(excl. Vishnu's ${fmt(vishnuShareTotal)})</span>`
+    : 'Cycle Total';
 
   wrap.innerHTML = `<table>
     <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Cycle Total</td><td class="num">${fmt(total)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">${totalLabel}</td><td class="num">${fmt(total)}</td><td></td></tr>
     </tbody></table>`;
 }
 
@@ -875,8 +939,9 @@ async function deleteExpense(id){
 
 /* ---------------- Settle cycle ---------------- */
 function openSettleModal(){
-  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
-  if(total===0){ showToast('No expenses to settle yet.'); return; }
+  if(liveExpenses.length===0){ showToast('No expenses to settle yet.'); return; }
+  const total = computeMessTotal(liveExpenses);
+  const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const {net, spent} = computeNetBalances(liveExpenses);
   const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
   const txns = simplifyDebts(net);
@@ -886,12 +951,12 @@ function openSettleModal(){
     : `<div class="settlement-line">Already settled — everyone paid their share.</div>`;
 
   document.getElementById('settleModalBody').innerHTML = `
-    <div class="form-row" style="grid-template-columns:${vishnuInvolved?'1fr 1fr 1fr':'1fr 1fr'};margin-bottom:4px;">
+    <div class="form-row" style="grid-template-columns:1fr 1fr;margin-bottom:4px;">
       <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.irshad)}</div></div>
       <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.azad)}</div></div>
-      ${vishnuInvolved ? `<div><label>Vishnu Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(spent.vishnu)}</div></div>` : ''}
     </div>
-    <div style="margin-top:10px;"><label>Total Cycle Expense</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
+    <div style="margin-top:10px;"><label>Total Cycle Expense (Irshad &amp; Azad)</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
+    ${vishnuInvolved ? `<p style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Vishnu's share of ${fmt(vishnuShareTotal)} is excluded — he's an outsider to this split and settles separately.</p>` : ''}
     ${settleLines}
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming will archive all entries to History and start a fresh cycle.</p>
   `;
@@ -900,7 +965,8 @@ function openSettleModal(){
 
 async function confirmSettle(){
   const {net, spent} = computeNetBalances(liveExpenses);
-  const total = liveExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const total = computeMessTotal(liveExpenses);
+  const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const txns = simplifyDebts(net);
   const {start,end} = cycleRangeFor(CURRENT_CYCLE);
   const snapshotExpenses = liveExpenses.map(e=>{
@@ -912,7 +978,7 @@ async function confirmSettle(){
     cycleKey: CURRENT_CYCLE,
     startDate: start.toISOString().slice(0,10),
     endDate: end.toISOString().slice(0,10),
-    totalExpense: total, irshadTotal: spent.irshad, azadTotal: spent.azad, vishnuTotal: spent.vishnu,
+    totalExpense: total, irshadTotal: spent.irshad, azadTotal: spent.azad, vishnuTotal: vishnuShareTotal,
     settlements: txns, expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1174,6 +1240,145 @@ function renderHistoryVishnu(){
 
 function toggleHist(id){ document.getElementById(id).classList.toggle('open'); }
 
+/* ---------------- Statement (download / WhatsApp) ---------------- */
+let statementMode = 'range';
+
+function setStatementMode(m){
+  statementMode = m;
+  document.querySelectorAll('[data-stmt]').forEach(b=>b.classList.toggle('active', b.dataset.stmt===m));
+  document.getElementById('stmtRangeRow').style.display = m==='range' ? 'grid':'none';
+  document.getElementById('stmtDayRow').style.display = m==='day' ? 'grid':'none';
+}
+
+function applyQuickRange(){
+  const v = document.getElementById('stmtQuick').value;
+  const today = new Date();
+  const toISO = (d)=> d.toISOString().slice(0,10);
+  if(v==='today'){
+    setStatementMode('day');
+    document.getElementById('stmtDay').value = toISO(today);
+  } else if(v==='7' || v==='30'){
+    setStatementMode('range');
+    const from = new Date(today); from.setDate(from.getDate() - (parseInt(v)-1));
+    document.getElementById('stmtFrom').value = toISO(from);
+    document.getElementById('stmtTo').value = toISO(today);
+  } else if(v==='cycle'){
+    setStatementMode('range');
+    const {start,end} = cycleRangeFor(CURRENT_CYCLE);
+    document.getElementById('stmtFrom').value = toISO(start);
+    document.getElementById('stmtTo').value = toISO(today < end ? today : end);
+  }
+}
+
+function getStatementRange(){
+  if(statementMode==='day'){
+    const d = document.getElementById('stmtDay').value;
+    if(!d) return null;
+    return {from:d, to:d};
+  }
+  const from = document.getElementById('stmtFrom').value;
+  const to = document.getElementById('stmtTo').value;
+  if(!from || !to) return null;
+  return {from, to};
+}
+
+// One-off read across the full expenses collection (live + archived) for
+// the chosen period — a statement should cover a date range regardless of
+// which cycle those entries were later settled into.
+async function fetchStatementExpenses(from, to){
+  if(!db){ showToast('Connect Firebase first — open settings.'); return null; }
+  const snap = await db.collection('expenses').where('date','>=',from).where('date','<=',to).get();
+  let list = [];
+  snap.forEach(doc=> list.push({id:doc.id, ...doc.data()}));
+  list.sort((a,b)=> a.date < b.date ? -1 : 1);
+  return list;
+}
+
+function buildStatementText(list, from, to){
+  const lines = [];
+  lines.push('THE MESS LEDGER — STATEMENT');
+  lines.push(`Period: ${fmtDate(new Date(from))}${from!==to ? ' to '+fmtDate(new Date(to)) : ''}`);
+  lines.push(`Generated: ${fmtDate(new Date())}`);
+  lines.push('-'.repeat(34));
+
+  if(list.length===0){
+    lines.push('No expenses recorded in this period.');
+  } else {
+    list.forEach(e=>{
+      const {participants, splitAmounts} = expenseSplitInfo(e);
+      const desc = (e.description||'').replace(/\[Marked by Vishnu\]|\[By Vishnu\]/g,'').trim();
+      lines.push(`${fmtDate(new Date(e.date))} · ${personLabel(e.person)} paid ${fmt(e.amount)}`);
+      if(desc) lines.push(`  ${desc}${e.category ? ' ('+e.category+')' : ''}`);
+      if(participants.includes('vishnu')){
+        lines.push(`  Split: ${participants.map(p=>personLabel(p)+' '+fmt(splitAmounts[p])).join(', ')}`);
+      }
+    });
+  }
+
+  lines.push('-'.repeat(34));
+  const {net, spent} = computeNetBalances(list);
+  const messTotal = computeMessTotal(list);
+  const vishnuShare = computeVishnuShareTotal(list);
+  lines.push(`Irshad paid: ${fmt(spent.irshad)}`);
+  lines.push(`Azad paid: ${fmt(spent.azad)}`);
+  lines.push(`Mess Total (Irshad & Azad): ${fmt(messTotal)}`);
+  if(vishnuShare > 0.0005 || spent.vishnu > 0.0005){
+    lines.push(`Vishnu paid: ${fmt(spent.vishnu)}`);
+    lines.push(`Vishnu's share (excluded, outsider to the split): ${fmt(vishnuShare)}`);
+  }
+
+  const txns = simplifyDebts(net);
+  lines.push('');
+  if(txns.length){
+    lines.push('Balance for this period:');
+    txns.forEach(t=> lines.push(`  ${personLabel(t.from)} owes ${personLabel(t.to)}: ${fmt(t.amount)}`));
+  } else {
+    lines.push('Balance for this period: Settled — no one owes anyone.');
+  }
+
+  lines.push('-'.repeat(34));
+  lines.push('The Mess Ledger · Irshad Himzan (c) 2026');
+  return lines.join('\n');
+}
+
+async function previewStatement(){
+  const range = getStatementRange();
+  if(!range) return showToast('Pick a valid date/range first.');
+  const list = await fetchStatementExpenses(range.from, range.to);
+  if(list===null) return;
+  const text = buildStatementText(list, range.from, range.to);
+  const wrap = document.getElementById('stmtPreviewWrap');
+  wrap.style.display = 'block';
+  wrap.innerHTML = `<div class="card" style="margin:0;"><div class="card-body"><pre style="white-space:pre-wrap;font-family:'IBM Plex Mono',monospace;font-size:12.5px;margin:0;line-height:1.6;">${escapeHtml(text)}</pre></div></div>`;
+}
+
+async function downloadStatement(){
+  const range = getStatementRange();
+  if(!range) return showToast('Pick a valid date/range first.');
+  const list = await fetchStatementExpenses(range.from, range.to);
+  if(list===null) return;
+  const text = buildStatementText(list, range.from, range.to);
+  const blob = new Blob([text], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mess-statement_${range.from}_to_${range.to}.txt`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Statement downloaded.');
+}
+
+async function sendStatementWhatsApp(){
+  const range = getStatementRange();
+  if(!range) return showToast('Pick a valid date/range first.');
+  const list = await fetchStatementExpenses(range.from, range.to);
+  if(list===null) return;
+  const text = buildStatementText(list, range.from, range.to);
+  const phone = document.getElementById('stmtPhone').value.trim().replace(/[^0-9]/g,'');
+  const url = (phone ? `https://wa.me/${phone}` : `https://wa.me/`) + `?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank');
+}
+
 /* ---------------- Charts ---------------- */
 let chartMonthly, chartTrend;
 function renderCharts(){
@@ -1266,6 +1471,9 @@ document.getElementById('saveConfigBtn').addEventListener('click', ()=>{
 document.getElementById('expDate').value = todayISO();
 document.getElementById('vDate').value = todayISO();
 document.getElementById('hDate').value = todayISO();
+document.getElementById('stmtFrom').value = todayISO();
+document.getElementById('stmtTo').value = todayISO();
+document.getElementById('stmtDay').value = todayISO();
 onParticipantsChange();
 initFirebase();
 </script>

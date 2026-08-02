@@ -33,6 +33,16 @@ h1,h2,.serif{font-family:'Fraunces',serif;}
 .widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
 .widget-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:8px;}
 .widget-value{font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:600;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+label{display:block;font-size:11.5px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
+input[type=text],input[type=number],input[type=date],select{
+  width:100%;padding:9px 11px;border:1px solid var(--rule);border-radius:7px;background:var(--paper);
+  font-family:'Inter',sans-serif;font-size:13.5px;color:var(--ink);
+}
+input:focus,select:focus{outline:2px solid var(--vishnu);outline-offset:1px;background:#fff;}
+.btn{padding:10px 18px;border-radius:8px;border:none;font-weight:600;font-size:13.5px;display:inline-flex;align-items:center;gap:7px;}
+.btn-primary{background:var(--vishnu);color:#fff;}
+.btn-primary:hover{background:#6E4723;}
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;padding:8px 10px;border-bottom:1.5px solid var(--ink);}
 td{padding:10px;border-bottom:1px solid var(--rule);vertical-align:middle;}
@@ -42,9 +52,12 @@ tr:last-child td{border-bottom:none;}
 .who-chip .dot{width:7px;height:7px;border-radius:50%;}
 .who-chip.irshad{color:#1F6F54;}.who-chip.irshad .dot{background:#1F6F54;}
 .who-chip.azad{color:#2C5F8A;}.who-chip.azad .dot{background:#2C5F8A;}
+.who-chip.vishnu{color:#8A5A2C;}.who-chip.vishnu .dot{background:#8A5A2C;}
 .total-row td{font-weight:700;border-top:2px double var(--ink);border-bottom:none;padding-top:12px;}
 .empty-state{text-align:center;padding:30px;color:var(--ink-soft);font-size:13.5px;}
 .info-box{background:var(--vishnu-tint);border:1px solid #D6BC96;color:#6B4E17;border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:20px;line-height:1.5;}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:9px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow);z-index:200;display:none;}
+.toast.show{display:block;}
 </style>
 </head>
 <body>
@@ -54,41 +67,63 @@ tr:last-child td{border-bottom:none;}
     <div class="brand-mark">V</div>
     <div>
       <div class="brand-name">Vishnu's Tab</div>
-      <div class="brand-sub">Shared Shared Items &amp; Settlement Overview</div>
+      <div class="brand-sub">Shared Items &amp; Settlement Overview</div>
     </div>
   </div>
 
-  <div class="info-box">👋 Hi Vishnu! This page displays only items bought alongside room orders that you need to reimburse. It is kept completely separate from the room's utility and grocery rent split.</div>
+  <div class="info-box">👋 Hi Vishnu! You can view items bought for you below, and log any payments or items you've bought for the house to automatically reduce your total balance.</div>
 
   <div class="widgets">
     <div class="widget">
-      <div class="widget-label">Total You Owe</div>
+      <div class="widget-label">Net Total You Owe</div>
       <div class="widget-value mono" id="vTotal">BHD 0.000</div>
     </div>
     <div class="widget">
-      <div class="widget-label">Active Items</div>
+      <div class="widget-label">Active Records</div>
       <div class="widget-value mono" id="vCount">0 entries</div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-head"><h3>Your Outstanding Items</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="vDateRange">Live Ledger</span></div>
+    <div class="card-head"><h3>Log What Vishnu Paid / Spent for House</h3></div>
+    <div class="card-body">
+      <div class="form-row">
+        <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="pAmount" placeholder="0.000"></div>
+        <div><label>Date</label><input type="date" id="pDate"></div>
+      </div>
+      <div class="form-row">
+        <div><label>Who did Vishnu buy for / pay?</label>
+          <select id="pTarget">
+            <option value="house">General House / Both</option>
+            <option value="irshad">Paid for Irshad</option>
+            <option value="azad">Paid for Azad</option>
+          </select>
+        </div>
+        <div><label>Description</label><input type="text" id="pDesc" placeholder="e.g. Vishnu bought snacks or paid cash"></div>
+      </div>
+      <button class="btn btn-primary" id="addVishnuPaymentBtn">📉 Add Vishnu Payment / Spend</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Ledger Summary (Debits &amp; Credits)</h3></div>
     <div class="card-body" style="padding:0;">
       <div id="vishnuTableWrap"></div>
     </div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-// Uses the exact same Firebase config stored in your browser or preset below
-// Replace or ensure it reads from your configuration keys:
+// Replace with your actual Firebase config keys
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAON8q9X1QzO3usFHDut63qXfl7QglauMg",
-  authDomain: "the-mess-ledger.firebaseapp.com",
-  projectId: "the-mess-ledger",
-  storageBucket: "the-mess-ledger.firebasestorage.app",
-  messagingSenderId: "156636852771",
-  appId: "1:156636852771:web:cfb333ec4f5f7bef16f796"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
 try {
@@ -99,6 +134,8 @@ const db = firebase.firestore();
 const CURRENCY = 'BHD';
 const fmt = (n) => `${CURRENCY} ${(Number(n)||0).toFixed(3)}`;
 function fmtDate(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+document.getElementById('pDate').value = todayISO();
 
 db.collection('vishnuExpenses').where('settled','==',false)
   .onSnapshot(snap => {
@@ -110,33 +147,67 @@ db.collection('vishnuExpenses').where('settled','==',false)
     document.getElementById('vishnuTableWrap').innerHTML = `<div class="empty-state">Could not load items. Check database rules.</div>`;
   });
 
-function renderVishnuView(items){
-  let irshadTotal = items.filter(e => e.paidBy === 'irshad').reduce((s,e) => s + Number(e.amount), 0);
-  let azadTotal = items.filter(e => e.paidBy === 'azad').reduce((s,e) => s + Number(e.amount), 0);
-  let total = irshadTotal + azadTotal;
+async function addVishnuPayment(){
+  const amount = parseFloat(document.getElementById('pAmount').value);
+  const date = document.getElementById('pDate').value || todayISO();
+  const target = document.getElementById('pTarget').value;
+  const description = document.getElementById('pDesc').value.trim() || 'Vishnu payment / spend';
+  if(!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
 
-  document.getElementById('vTotal').textContent = fmt(total);
-  document.getElementById('vCount').textContent = `${items.length} items`;
+  // Stored as a negative amount or credit type so it reduces the overall total owed
+  await db.collection('vishnuExpenses').add({
+    paidBy: 'vishnu',
+    target: target,
+    amount: -Math.abs(amount), // Negative to subtract from what Vishnu owes
+    date,
+    description: `[Vishnu Paid] ${description} (${target})`,
+    settled: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  document.getElementById('pAmount').value = '';
+  document.getElementById('pDesc').value = '';
+  showToast('Vishnu payment logged and balance updated.');
+}
+
+document.getElementById('addVishnuPaymentBtn').addEventListener('click', addVishnuPayment);
+
+function renderVishnuView(items){
+  let totalNet = 0;
+  items.forEach(e => { totalNet += Number(e.amount); });
+
+  document.getElementById('vTotal').textContent = fmt(totalNet);
+  document.getElementById('vCount').textContent = `${items.length} records`;
 
   const wrap = document.getElementById('vishnuTableWrap');
   if(items.length === 0){
-    wrap.innerHTML = `<div class="empty-state">🎉 All clear! You have no outstanding balance right now.</div>`;
+    wrap.innerHTML = `<div class="empty-state">🎉 All clear! No records right now.</div>`;
     return;
   }
 
-  let rows = items.map(e => `
-    <tr>
-      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>Paid by ${e.paidBy === 'irshad' ? 'Irshad' : 'Azad'}</span></td>
-      <td>${e.description || 'Shared item'}</td>
-      <td class="num">${fmt(e.amount)}</td>
-    </tr>`).join('');
+  let rows = items.map(e => {
+    let isCredit = Number(e.amount) < 0;
+    let payerLabel = e.paidBy === 'vishnu' ? '<span class="who-chip vishnu"><span class="dot"></span>Vishnu Paid</span>' : `<span class="who-chip ${e.paidBy}"><span class="dot"></span>Paid by ${e.paidBy}</span>`;
+    return `
+      <tr>
+        <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+        <td>${payerLabel}</td>
+        <td>${e.description || ''}</td>
+        <td class="num" style="color:${isCredit ? 'var(--emerald)' : 'inherit'};">${fmt(e.amount)}</td>
+      </tr>`;
+  }).join('');
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Payer</th><th>Description</th><th class="num">Amount</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Total Due</td><td class="num">${fmt(total)}</td></tr>
+      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(totalNet)}</td></tr>
     </tbody></table>`;
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
 }
 </script>
 </body>

@@ -31,7 +31,7 @@ h1,h2,.serif{font-family:'Fraunces',serif;}
 .card-head{padding:16px 20px;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;}
 .card-head h3{margin:0;font-size:16px;}
 .card-body{padding:20px;}
-.widgets{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+.widgets{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
 @media(max-width:600px){.widgets{grid-template-columns:1fr;}}
 .widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);}
 .widget-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:6px;}
@@ -82,18 +82,15 @@ tr:last-child td{border-bottom:none;}
     <div class="sync-badge"><span class="sync-dot"></span>Live Synced</div>
   </div>
 
+  <!-- Top 2 Widgets as previously requested -->
   <div class="widgets">
     <div class="widget">
-      <div class="widget-label">Total Mess Spend</div>
-      <div class="widget-value mono" id="totalSpend">BHD 0.000</div>
+      <div class="widget-label">Net Total You Owe</div>
+      <div class="widget-value mono" id="netTotalOwe">BHD 0.000</div>
     </div>
     <div class="widget">
-      <div class="widget-label">Irshad Spend</div>
-      <div class="widget-value mono" id="irshadSpend">BHD 0.000</div>
-    </div>
-    <div class="widget">
-      <div class="widget-label">Azad Spend</div>
-      <div class="widget-value mono" id="azadSpend">BHD 0.000</div>
+      <div class="widget-label">Active Records</div>
+      <div class="widget-value mono" id="activeRecordsCount">0 records</div>
     </div>
   </div>
 
@@ -118,24 +115,32 @@ tr:last-child td{border-bottom:none;}
     </div>
   </div>
 
-  <!-- Vishnu's Shared Items Tab Manager -->
+  <!-- Vishnu's Tab Manager (Integrated in Interface with previous menu look) -->
   <div class="card">
-    <div class="card-head"><h3>Manage Vishnu's Tab Items</h3></div>
+    <div class="card-head"><h3>Log What Vishnu Spent / Paid</h3></div>
     <div class="card-body">
       <div class="form-row">
         <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="vAmount" placeholder="0.000"></div>
         <div><label>Date</label><input type="date" id="vDate"></div>
       </div>
       <div class="form-row">
-        <div><label>Paid By</label>
+        <div><label>Assign To / Related To</label>
           <select id="vPaidBy">
+            <option value="house">General House / Both</option>
             <option value="irshad">Irshad</option>
             <option value="azad">Azad</option>
+            <option value="azad-add">Paid by Azad (Added to Vishnu Tab)</option>
+            <option value="irshad-add">Paid by Irshad (Added to Vishnu Tab)</option>
           </select>
         </div>
-        <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Shared item bought for Vishnu"></div>
+        <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Bought groceries"></div>
       </div>
-      <button class="btn btn-primary" id="addVishnuItemBtn">+ Add to Vishnu's Tab</button>
+      <div style="margin-top:12px; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="addToMess" checked style="width:auto;">
+        <label for="addToMess" style="display:inline; margin:0; text-transform:none; font-weight:normal;">Also add this as a regular expense spend for the chosen person in the main room ledger</label>
+      </div>
+      <br>
+      <button class="btn btn-primary" id="addVishnuItemBtn">💾 Save Vishnu Spend / Payment</button>
     </div>
   </div>
 
@@ -149,7 +154,7 @@ tr:last-child td{border-bottom:none;}
 
   <!-- Vishnu Tab Log -->
   <div class="card">
-    <div class="card-head"><h3>Vishnu's Tab Outstanding Items</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="vishnuTotalOwesElement">BHD 0.000</span></div>
+    <div class="card-head"><h3>Ledger Summary (Debits &amp; Credits)</h3></div>
     <div class="card-body" style="padding:0;">
       <div id="vishnuTableWrap"></div>
     </div>
@@ -216,23 +221,73 @@ document.getElementById('addExpenseBtn').addEventListener('click', async () => {
   showToast('Expense added successfully.');
 });
 
-// Add Vishnu Item
+// Add Vishnu Item / Spend
 document.getElementById('addVishnuItemBtn').addEventListener('click', async () => {
   const amount = parseFloat(document.getElementById('vAmount').value);
   const date = document.getElementById('vDate').value || todayISO();
-  const paidBy = document.getElementById('vPaidBy').value;
+  const selection = document.getElementById('vPaidBy').value;
   const description = document.getElementById('vDesc').value.trim() || 'Shared item';
+  const addToMess = document.getElementById('addToMess').checked;
 
   if(!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
 
-  await db.collection('vishnuExpenses').add({
-    amount, date, paidBy, description, settled: false,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  if(selection === 'azad-add' || selection === 'irshad-add') {
+    let actualPayer = selection.replace('-add', '');
+    await db.collection('vishnuExpenses').add({
+      amount: Math.abs(amount), 
+      date, 
+      paidBy: actualPayer, 
+      description, 
+      settled: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast("Added to Vishnu's Tab.");
+  } else {
+    // Vishnu spent for house / irshad / azad
+    let target = selection;
+    
+    // 1. Add negative credit entry to vishnuExpenses
+    await db.collection('vishnuExpenses').add({
+      paidBy: 'vishnu',
+      target: target,
+      amount: -Math.abs(amount), 
+      date,
+      description: `[Vishnu Paid] ${description} (${target})`,
+      settled: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2. If checked, sync to main room expenses ledger
+    if(addToMess && (target === 'irshad' || target === 'azad')) {
+      await db.collection('expenses').add({
+        paidBy: target,
+        amount: Math.abs(amount),
+        date,
+        description: `[Paid via Vishnu] ${description}`,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } else if(addToMess && target === 'house') {
+      let half = Math.abs(amount) / 2;
+      await db.collection('expenses').add({
+        paidBy: 'irshad',
+        amount: half,
+        date,
+        description: `[House/Vishnu Split] ${description}`,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await db.collection('expenses').add({
+        paidBy: 'azad',
+        amount: half,
+        date,
+        description: `[House/Vishnu Split] ${description}`,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    showToast('Vishnu spend recorded and synced.');
+  }
 
   document.getElementById('vAmount').value = '';
   document.getElementById('vDesc').value = '';
-  showToast("Added to Vishnu's Tab.");
 });
 
 async function deleteExpense(id){
@@ -258,10 +313,6 @@ function renderExpenses(items){
     if(e.paidBy === 'azad') azad += amt;
   });
 
-  document.getElementById('totalSpend').textContent = fmt(total);
-  document.getElementById('irshadSpend').textContent = fmt(irshad);
-  document.getElementById('azadSpend').textContent = fmt(azad);
-
   const wrap = document.getElementById('expenseTableWrap');
   if(items.length === 0){
     wrap.innerHTML = `<div class="empty-state">No room expenses logged yet.</div>`;
@@ -283,9 +334,11 @@ function renderExpenses(items){
 }
 
 function renderVishnuTab(items){
-  // Correctly sums up all item amounts (including negative payments/credits)
   let totalOwes = items.reduce((sum, item) => sum + Number(item.amount), 0);
-  document.getElementById('vishnuTotalOwesElement').textContent = `Vishnu Owes: ${fmt(totalOwes)}`;
+  
+  // Update top widgets to match exact previous layout
+  document.getElementById('netTotalOwe').textContent = fmt(totalOwes);
+  document.getElementById('activeRecordsCount').textContent = `${items.length} records`;
 
   const wrap = document.getElementById('vishnuTableWrap');
   if(items.length === 0){
@@ -295,11 +348,16 @@ function renderVishnuTab(items){
 
   let rows = items.map(e => {
     let isCredit = Number(e.amount) < 0;
-    let payerLabel = e.paidBy === 'vishnu' ? '<span class="who-chip vishnu"><span class="dot"></span>Vishnu Paid</span>' : `<span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy === 'irshad' ? 'Irshad' : 'Azad'} paid</span>`;
+    let typeLabel = '';
+    if(e.paidBy === 'vishnu') {
+      typeLabel = `<span class="who-chip vishnu"><span class="dot"></span>Vishnu Paid</span>`;
+    } else {
+      typeLabel = `<span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy === 'irshad' ? 'Irshad' : 'Azad'} paid</span>`;
+    }
     return `
       <tr>
         <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-        <td>${payerLabel}</td>
+        <td>${typeLabel}</td>
         <td>${e.description}</td>
         <td class="num" style="color:${isCredit ? 'var(--emerald)' : 'inherit'};">${fmt(e.amount)}</td>
         <td style="text-align:right;"><button class="btn btn-danger" onclick="deleteVishnuItem('${e.id}')">Remove</button></td>
@@ -307,10 +365,16 @@ function renderVishnuTab(items){
   }).join('');
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount</th><th style="text-align:right;">Action</th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th><th style="text-align:right;">Action</th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Total Vishnu Owes</td><td class="num">${fmt(totalOwes)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(totalOwes)}</td><td></td></tr>
     </tbody></table>`;
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
 }
 </script>
 </body>

@@ -317,41 +317,41 @@ tr:last-child td{border-bottom:none;}
         <button class="btn btn-emerald" id="openVishnuSettleBtn">Settle with Vishnu →</button>
       </div>
 
-      <div class="info-note">These entries never enter the Irshad/Azad monthly split. Link any item below to your personal bill if it was included in your total checkout, so your payment gets credited properly[cite: 1].</div>
+      <div class="info-note">When Vishnu spends/pays, select who paid/related to give them credit and reduce what Vishnu owes them[cite: 1]. You can also choose to add it directly as a regular expense spend for the chosen person in the main room ledger.</div>
 
       <div class="widgets" style="grid-template-columns:repeat(3,1fr);">
-        <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu Owes (Total)</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
+        <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Net Balance Due from Vishnu</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Paid by Irshad</div><div class="widget-value mono" id="vIrshad">BHD 0.000</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Paid by Azad</div><div class="widget-value mono" id="vAzad">BHD 0.000</div></div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Add Vishnu Item</h3></div>
+        <div class="card-head"><h3>Log What Vishnu Spent / Paid</h3></div>
         <div class="card-body">
-          <label>Who paid for it?</label>
-          <div class="person-toggle" style="margin-bottom:14px;">
-            <button type="button" class="person-btn sel-irshad" id="vPickIrshad" onclick="setVishnuPayer('irshad')"><span class="dot"></span>Irshad</button>
-            <button type="button" class="person-btn" id="vPickAzad" onclick="setVishnuPayer('azad')"><span class="dot"></span>Azad</button>
-          </div>
-          <div class="form-row three">
+          <div class="form-row">
             <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="vAmount" placeholder="0.000"></div>
             <div><label>Date</label><input type="date" id="vDate"></div>
-            <div><label>Link to Personal Bill?</label>
-              <select id="vIncludeInBill">
-                <option value="no">No (Separate payment)</option>
-                <option value="yes">Yes (Included in my bill total)</option>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Assign To / Related To</label>
+              <select id="vAssignTo">
+                <option value="irshad">Irshad</option>
+                <option value="azad">Azad</option>
               </select>
             </div>
+            <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Bought groceries"></div>
           </div>
-          <div class="form-row" style="grid-template-columns:1fr;">
-            <div><label>Description</label><input type="text" id="vDesc" placeholder="e.g. Shared Amazon order or item in bill"></div>
+          <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="vAddToMain" style="width:auto;margin:0;">
+            <label for="vAddToMain" style="display:inline;margin:0;cursor:pointer;text-transform:none;font-weight:500;color:var(--ink);">Also add this as a regular expense spend for the chosen person in the main room ledger</label>
           </div>
-          <button class="btn btn-primary" id="addVishnuBtn">＋ Add Item</button>
+          <button class="btn btn-primary" id="addVishnuBtn" style="background:var(--vishnu);">💾 Save Vishnu Spend / Payment</button>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>Outstanding Items</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="vEntryCount">0 entries</span></div>
+        <div class="card-head"><h3>Outstanding Items</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="vEntryCount">2 entries</span></div>
         <div class="card-body" style="padding:0;">
           <div id="vishnuTableWrap"></div>
         </div>
@@ -452,7 +452,6 @@ tr:last-child td{border-bottom:none;}
 let db = null;
 let app = null;
 let currentPayer = 'irshad';
-let currentVishnuPayer = 'irshad';
 let liveExpenses = [];
 let liveVishnu = [];
 let cycleHistoryCache = [];
@@ -523,7 +522,7 @@ function attachListeners(){
       liveVishnu = [];
       snap.forEach(doc=> liveVishnu.push({id:doc.id, ...doc.data()}));
       liveVishnu.sort((a,b)=> (a.date < b.date ? 1 : -1));
-      renderDashboard(); // Re-render dashboard since linked vishnu bills affect totals
+      renderDashboard();
       renderVishnu();
     }, err=> console.error(err));
 
@@ -551,16 +550,8 @@ function renderDashboard(){
   const daysLeft = Math.max(0, Math.ceil((end - today)/86400000)+1);
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
-  // Calculate direct expenses + any Vishnu items explicitly included in personal bills
   let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
   let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-
-  liveVishnu.forEach(v => {
-    if(v.includeInBill === 'yes') {
-      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
-      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
-    }
-  });
 
   const total = irshadTotal + azadTotal;
 
@@ -572,7 +563,7 @@ function renderDashboard(){
   document.getElementById('entryCount').textContent = `${liveExpenses.length} entries`;
 
   const half = total/2;
-  const diff = irshadTotal - half; // positive => azad owes irshad
+  const diff = irshadTotal - half;
   const card = document.getElementById('wBalanceCard');
   const valEl = document.getElementById('wBalance');
   const subEl = document.getElementById('wBalanceSub');
@@ -610,18 +601,12 @@ function renderExpenseTable(){
   
   let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
   let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  liveVishnu.forEach(v => {
-    if(v.includeInBill === 'yes') {
-      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
-      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
-    }
-  });
   const total = irshadTotal + azadTotal;
 
   wrap.innerHTML = `<table>
     <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Cycle Total (incl. linked bills)</td><td class="num">${fmt(total)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">Cycle Total</td><td class="num">${fmt(total)}</td><td></td></tr>
     </tbody></table>`;
 }
 
@@ -657,12 +642,6 @@ async function deleteExpense(id){
 function openSettleModal(){
   let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
   let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  liveVishnu.forEach(v => {
-    if(v.includeInBill === 'yes') {
-      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
-      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
-    }
-  });
   const total = irshadTotal + azadTotal;
   if(total===0){ showToast('No expenses to settle yet.'); return; }
   const half = total/2;
@@ -674,8 +653,8 @@ function openSettleModal(){
 
   document.getElementById('settleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;margin-bottom:4px;">
-      <div><label>Irshad Spent (incl. linked)</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadTotal)}</div></div>
-      <div><label>Azad Spent (incl. linked)</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadTotal)}</div></div>
+      <div><label>Irshad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadTotal)}</div></div>
+      <div><label>Azad Spent</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadTotal)}</div></div>
     </div>
     <div style="margin-top:10px;"><label>Total Cycle Expense</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(total)}</div></div>
     <div class="settlement-line">${settleLine}</div>
@@ -687,12 +666,6 @@ function openSettleModal(){
 async function confirmSettle(){
   let irshadTotal = liveExpenses.filter(e=>e.person==='irshad').reduce((s,e)=>s+Number(e.amount),0);
   let azadTotal = liveExpenses.filter(e=>e.person==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  liveVishnu.forEach(v => {
-    if(v.includeInBill === 'yes') {
-      if(v.paidBy === 'irshad') irshadTotal += Number(v.amount);
-      if(v.paidBy === 'azad') azadTotal += Number(v.amount);
-    }
-  });
   const total = irshadTotal + azadTotal;
   const half = total/2;
   const diff = irshadTotal - half;
@@ -721,28 +694,21 @@ async function confirmSettle(){
 }
 
 /* ---------------- Vishnu ---------------- */
-function setVishnuPayer(p){
-  currentVishnuPayer = p;
-  document.getElementById('vPickIrshad').className = 'person-btn' + (p==='irshad' ? ' sel-irshad':'');
-  document.getElementById('vPickAzad').className = 'person-btn' + (p==='azad' ? ' sel-azad':'');
-}
-
 function renderVishnu(){
-  // FIX: Vishnu Net Sum calculation.
-  // If Vishnu paid, it acts as a credit (negative effect on what Vishnu owes).
-  // If someone else paid for Vishnu, it acts as a debit (positive effect on what Vishnu owes).
   let netVishnuOwes = 0;
   let irshadV = 0;
   let azadV = 0;
 
   liveVishnu.forEach(e => {
     const amt = Number(e.amount) || 0;
-    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+    if (e.assignTo === 'irshad') {
       netVishnuOwes -= amt;
+      irshadV += amt;
+    } else if (e.assignTo === 'azad') {
+      netVishnuOwes -= amt;
+      azadV += amt;
     } else {
       netVishnuOwes += amt;
-      if (e.paidBy === 'irshad') irshadV += amt;
-      if (e.paidBy === 'azad') azadV += amt;
     }
   });
 
@@ -759,20 +725,22 @@ function renderVishnu(){
   }
   let rows = liveVishnu.map(e=>{
     const amt = Number(e.amount) || 0;
-    const isVP = e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'));
-    const effAmt = isVP ? -amt : amt;
+    const assign = e.assignTo;
+    const isVishnuSpend = assign === 'irshad' || assign === 'azad';
+    const effAmt = isVishnuSpend ? -amt : amt;
+    const payerLabel = isVishnuSpend ? `[Vishnu Paid] ${assign} (${e.assignTo})` : 'Paid by Room';
     return `
     <tr>
       <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy||'irshad'}"><span class="dot"></span>${isVP ? 'Vishnu Paid' : ((e.paidBy==='azad'?'Azad':'Irshad') + ' paid')}</span></td>
-      <td>${escapeHtml(e.description||'')} ${e.includeInBill==='yes' ? '<span style="font-size:11px;background:var(--brass-tint);padding:2px 6px;border-radius:4px;color:var(--brass);">Linked to bill</span>':''}</td>
+      <td><span class="who-chip ${assign||'irshad'}"><span class="dot"></span>${assign==='azad'?'Azad paid':'Irshad paid'}</span></td>
+      <td>${escapeHtml(e.description||'')} ${e.addToMain ? '<span style="font-size:11px;background:var(--brass-tint);padding:2px 6px;border-radius:4px;color:var(--brass);">Added to main</span>':''}</td>
       <td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td>
       <td><button class="btn-danger-text" onclick="deleteVishnu('${e.id}')">Remove</button></td>
     </tr>`;
   }).join('');
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Type / Payer</th><th>Description</th><th class="num">Amount / Effect</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount / Effect</th><th></th></tr></thead>
     <tbody>${rows}
       <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(netVishnuOwes)}</td><td></td></tr>
     </tbody></table>`;
@@ -783,16 +751,36 @@ async function addVishnu(){
   const amount = parseFloat(document.getElementById('vAmount').value);
   const date = document.getElementById('vDate').value || todayISO();
   const description = document.getElementById('vDesc').value.trim();
-  const includeInBill = document.getElementById('vIncludeInBill').value;
+  const assignTo = document.getElementById('vAssignTo').value;
+  const addToMain = document.getElementById('vAddToMain').checked;
   if(!amount || amount<=0) return showToast('Enter a valid amount.');
+
+  // Save to vishnuExpenses collection
   await db.collection('vishnuExpenses').add({
-    paidBy: currentVishnuPayer, amount, date, description, includeInBill, settled:false,
+    assignTo, amount, date, description, addToMain, settled:false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
+
+  // If checkbox is checked, also add as regular expense spend for the chosen person in main room ledger
+  if(addToMain){
+    await db.collection('expenses').add({
+      person: assignTo,
+      amount,
+      date,
+      category: 'Other',
+      description: description ? `[Vishnu Spend] ${description}` : '[Vishnu Spend]',
+      cycleKey: CURRENT_CYCLE,
+      archived: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
   document.getElementById('vAmount').value='';
   document.getElementById('vDesc').value='';
-  showToast('Added to Vishnu\'s tab.');
+  document.getElementById('vAddToMain').checked = false;
+  showToast('Saved Vishnu Spend / Payment.');
 }
+
 async function deleteVishnu(id){
   if(!confirm('Remove this entry?')) return;
   await db.collection('vishnuExpenses').doc(id).delete();
@@ -805,18 +793,20 @@ function openVishnuSettleModal(){
   let azadV = 0;
   liveVishnu.forEach(e => {
     const amt = Number(e.amount) || 0;
-    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+    if (e.assignTo === 'irshad') {
       netVishnuOwes -= amt;
+      irshadV += amt;
+    } else if (e.assignTo === 'azad') {
+      netVishnuOwes -= amt;
+      azadV += amt;
     } else {
       netVishnuOwes += amt;
-      if (e.paidBy === 'irshad') irshadV += amt;
-      if (e.paidBy === 'azad') azadV += amt;
     }
   });
   document.getElementById('vishnuSettleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;">
-      <div><label>Paid by Irshad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadV)}</div></div>
-      <div><label>Paid by Azad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadV)}</div></div>
+      <div><label>Irshad Credited</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadV)}</div></div>
+      <div><label>Azad Credited</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadV)}</div></div>
     </div>
     <div style="margin-top:10px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming archives these ${liveVishnu.length} entries to History and clears the tab.</p>
@@ -830,15 +820,17 @@ async function confirmVishnuSettle(){
   let azadV = 0;
   liveVishnu.forEach(e => {
     const amt = Number(e.amount) || 0;
-    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+    if (e.assignTo === 'irshad') {
       netVishnuOwes -= amt;
+      irshadV += amt;
+    } else if (e.assignTo === 'azad') {
+      netVishnuOwes -= amt;
+      azadV += amt;
     } else {
       netVishnuOwes += amt;
-      if (e.paidBy === 'irshad') irshadV += amt;
-      if (e.paidBy === 'azad') azadV += amt;
     }
   });
-  const snapshotExpenses = liveVishnu.map(e=>({paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date, includeInBill:e.includeInBill, isVishnuPaid:e.isVishnuPaid}));
+  const snapshotExpenses = liveVishnu.map(e=>({assignTo:e.assignTo, amount:e.amount, description:e.description, date:e.date, addToMain:e.addToMain}));
   await db.collection('vishnuHistory').add({
     total: netVishnuOwes, paidByIrshad: irshadV, paidByAzad: azadV,
     expenses: snapshotExpenses,
@@ -899,11 +891,12 @@ function renderHistoryVishnu(){
     const dt = c.settledAt && c.settledAt.toDate ? c.settledAt.toDate() : new Date();
     const rows = (c.expenses||[]).map(e=>{
       const amt = Number(e.amount) || 0;
-      const isVP = e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'));
-      const effAmt = isVP ? -amt : amt;
+      const assign = e.assignTo;
+      const isVishnuSpend = assign === 'irshad' || assign === 'azad';
+      const effAmt = isVishnuSpend ? -amt : amt;
       return `
       <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy||'irshad'}"><span class="dot"></span>${isVP ? 'Vishnu Paid' : ((e.paidBy==='azad'?'Azad':'Irshad') + ' paid')}</span></td>
+      <td><span class="who-chip ${assign||'irshad'}"><span class="dot"></span>${assign==='azad'?'Azad paid':'Irshad paid'}</span></td>
       <td>${escapeHtml(e.description||'')}</td><td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td></tr>`;
     }).join('');
     return `<div class="hist-item" id="hv-${c.id}">
@@ -913,10 +906,10 @@ function renderHistoryVishnu(){
       </div>
       <div class="hist-body">
         <div class="form-row" style="grid-template-columns:1fr 1fr;margin-top:14px;">
-          <div><label>Paid by Irshad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByIrshad)}</div></div>
-          <div><label>Paid by Azad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByAzad)}</div></div>
+          <div><label>Irshad Credited</label><div class="mono" style="font-weight:600;">${fmt(c.paidByIrshad)}</div></div>
+          <div><label>Azad Credited</label><div class="mono" style="font-weight:600;">${fmt(c.paidByAzad)}</div></div>
         </div>
-        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Type / Payer</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead><tbody>${rows}</tbody></table>
+        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead><tbody>${rows}</tbody></table>
       </div>
     </div>`;
   }).join('');

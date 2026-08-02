@@ -288,7 +288,6 @@ tr:last-child td{border-bottom:none;}
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
         <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
-        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
       </div>
 
       <div class="card">
@@ -741,24 +740,6 @@ function renderDashboard(){
     document.getElementById('wVishnu').textContent = fmt(vishnuShareTotal);
     const vCount = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu')).length;
     document.getElementById('wVishnuCount').textContent = `${vCount} entries · not counted above`;
-  }
-
-  const card = document.getElementById('wBalanceCard');
-  const valEl = document.getElementById('wBalance');
-  const subEl = document.getElementById('wBalanceSub');
-  const txns = simplifyDebts(net);
-  if(liveExpenses.length === 0 || txns.length === 0){
-    card.className = 'widget balance settled';
-    valEl.textContent = 'Settled';
-    subEl.textContent = liveExpenses.length===0 ? 'No expenses logged yet' : 'Everyone paid their share';
-  } else if(txns.length === 1){
-    card.className = 'widget balance owed';
-    valEl.textContent = fmt(txns[0].amount);
-    subEl.textContent = `${personLabel(txns[0].from)} owes ${personLabel(txns[0].to)}`;
-  } else {
-    card.className = 'widget balance owed';
-    valEl.textContent = `${txns.length} transfers`;
-    subEl.textContent = txns.map(t=>`${personLabel(t.from)}→${personLabel(t.to)} ${fmt(t.amount)}`).join(', ');
   }
 
   renderExpenseTable();

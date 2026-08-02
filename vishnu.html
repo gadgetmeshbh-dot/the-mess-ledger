@@ -72,7 +72,7 @@ tr:last-child td{border-bottom:none;}
     </div>
   </div>
 
-  <div class="info-box">👋 Hi Vishnu! Log any payments or purchases you made for the house or room members below. If it's a mess purchase for Irshad or Azad, select their name to credit their spend and reduce what you owe.</div>
+  <div class="info-box">👋 Hi Vishnu! You can only see and add entries on this tab — not the room's own expenses. Use <b>Personal Item</b> when you paid for something of Irshad's or Azad's that has nothing to do with the mess. Use <b>Mess Purchase</b> when you paid for something that's part of the mess and should be credited to Irshad or Azad in their ledger. Either way it comes off what you owe.</div>
 
   <div class="widgets">
     <div class="widget">
@@ -86,28 +86,31 @@ tr:last-child td{border-bottom:none;}
   </div>
 
   <div class="card">
-    <div class="card-head"><h3>Log What Vishnu Spent / Paid</h3></div>
+    <div class="card-head"><h3>Log a Payment You Made</h3></div>
     <div class="card-body">
       <div class="form-row">
         <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="pAmount" placeholder="0.000"></div>
         <div><label>Date</label><input type="date" id="pDate"></div>
       </div>
       <div class="form-row">
-        <div><label>Assign to / Related to</label>
-          <select id="pTarget">
-            <option value="house">General House / Both</option>
-            <option value="irshad">Irshad's Mess / Account</option>
-            <option value="azad">Azad's Mess / Account</option>
+        <div><label>What kind of payment?</label>
+          <select id="pPurpose">
+            <option value="personal">Personal item — for Irshad or Azad, not the mess</option>
+            <option value="mess">Mess purchase — credit it to Irshad or Azad</option>
           </select>
         </div>
-        <div><label>Description</label><input type="text" id="pDesc" placeholder="e.g. Bought groceries or paid bill"></div>
+        <div><label>For whom?</label>
+          <select id="pPerson">
+            <option value="irshad">Irshad</option>
+            <option value="azad">Azad</option>
+          </select>
+        </div>
       </div>
-      <div class="checkbox-group">
-        <input type="checkbox" id="addToMess" checked>
-        <label for="addToMess" style="display:inline; margin:0; text-transform:none; color:var(--ink);">Also add this as a regular expense spend for the chosen person in the main room ledger</label>
+      <div class="form-row" style="grid-template-columns:1fr;">
+        <div><label>Description</label><input type="text" id="pDesc" placeholder="e.g. Paid for his phone cover / Bought groceries"></div>
       </div>
-      <br>
-      <button class="btn btn-primary" id="addVishnuPaymentBtn">📉 Save Vishnu Spend / Payment</button>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 14px;">Personal items only affect your tab. Mess purchases also add to that cycle's mess total, tagged <b>By Vishnu</b>.</p>
+      <button class="btn btn-primary" id="addVishnuPaymentBtn">📉 Save Payment</button>
     </div>
   </div>
 
@@ -140,7 +143,14 @@ const CURRENCY = 'BHD';
 const fmt = (n) => `${CURRENCY} ${(Number(n)||0).toFixed(3)}`;
 function fmtDate(d){ return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function cycleKeyFor(d = new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 document.getElementById('pDate').value = todayISO();
+
+// Every vishnuExpenses doc has a `kind`:
+//   'house_for_vishnu'    -> Vishnu's personal item was on the house's bill. Adds to what he owes. (Added from index.html only.)
+//   'vishnu_personal_for' -> Vishnu paid for Irshad/Azad's personal item (not mess). Reduces what he owes.
+//   'vishnu_mess_assign'  -> Vishnu paid a mess item, credited to Irshad/Azad. Reduces what he owes AND lands in the mess total.
+function vishnuKindOf(e){ return e.kind || (e.assignTo ? 'vishnu_mess_assign' : 'house_for_vishnu'); }
 
 db.collection('vishnuExpenses').where('settled','==',false)
   .onSnapshot(snap => {
@@ -155,61 +165,58 @@ db.collection('vishnuExpenses').where('settled','==',false)
 async function addVishnuPayment(){
   const amount = parseFloat(document.getElementById('pAmount').value);
   const date = document.getElementById('pDate').value || todayISO();
-  const target = document.getElementById('pTarget').value;
-  const description = document.getElementById('pDesc').value.trim() || 'Vishnu spend / payment';
-  const addToMess = document.getElementById('addToMess').checked;
+  const purpose = document.getElementById('pPurpose').value; // 'personal' | 'mess'
+  const person = document.getElementById('pPerson').value;   // 'irshad' | 'azad'
+  const description = document.getElementById('pDesc').value.trim();
 
   if(!amount || amount <= 0) { showToast('Enter a valid amount.'); return; }
 
-  // 1. Add to vishnuExpenses as negative so it reduces what Vishnu owes on his tab
-  await db.collection('vishnuExpenses').add({
-    paidBy: 'vishnu',
-    target: target,
-    amount: -Math.abs(amount), 
-    date,
-    description: `[Vishnu Paid] ${description} (${target})`,
-    settled: false,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
-
-  // 2. If selected to add to the main mess expense sheet for Irshad or Azad
-  if(addToMess && (target === 'irshad' || target === 'azad')) {
-    await db.collection('expenses').add({
-      paidBy: target, // Recorded as spent by Irshad or Azad in the main ledger
-      amount: Math.abs(amount),
-      date,
-      description: `[Paid via Vishnu] ${description}`,
+  if(purpose === 'personal'){
+    // Personal item, unrelated to the mess. Only reduces what Vishnu owes — never touches the mess total.
+    await db.collection('vishnuExpenses').add({
+      kind: 'vishnu_personal_for',
+      target: person,
+      amount, date,
+      description: description || `Personal item for ${person === 'azad' ? 'Azad' : 'Irshad'}`,
+      settled: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-  } else if(addToMess && target === 'house') {
-    // Split equally between irshad and azad if general house
-    let half = Math.abs(amount) / 2;
-    await db.collection('expenses').add({
-      paidBy: 'irshad',
-      amount: half,
-      date,
-      description: `[House/Vishnu Split] ${description}`,
+  } else {
+    // Mess purchase, credited to Irshad or Azad. Reduces what Vishnu owes AND adds to the mess total.
+    const markedDesc = description ? `${description} [By Vishnu]` : '[By Vishnu]';
+    await db.collection('vishnuExpenses').add({
+      kind: 'vishnu_mess_assign',
+      assignTo: person,
+      amount, date,
+      description: markedDesc,
+      settled: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     await db.collection('expenses').add({
-      paidBy: 'azad',
-      amount: half,
-      date,
-      description: `[House/Vishnu Split] ${description}`,
+      person: person,
+      amount, date,
+      category: 'Other',
+      description: markedDesc,
+      cycleKey: cycleKeyFor(),
+      archived: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
 
   document.getElementById('pAmount').value = '';
   document.getElementById('pDesc').value = '';
-  showToast('Vishnu record saved and synced successfully.');
+  showToast('Saved.');
 }
 
 document.getElementById('addVishnuPaymentBtn').addEventListener('click', addVishnuPayment);
 
 function renderVishnuView(items){
   let totalNet = 0;
-  items.forEach(e => { totalNet += Number(e.amount); });
+  items.forEach(e => {
+    const amt = Number(e.amount) || 0;
+    const kind = vishnuKindOf(e);
+    totalNet += (kind === 'house_for_vishnu') ? amt : -amt;
+  });
 
   document.getElementById('vTotal').textContent = fmt(totalNet);
   document.getElementById('vCount').textContent = `${items.length} records`;
@@ -221,14 +228,22 @@ function renderVishnuView(items){
   }
 
   let rows = items.map(e => {
-    let isCredit = Number(e.amount) < 0;
-    let payerLabel = e.paidBy === 'vishnu' ? '<span class="who-chip vishnu"><span class="dot"></span>Vishnu Paid</span>' : `<span class="who-chip ${e.paidBy}"><span class="dot"></span>Paid by ${e.paidBy}</span>`;
+    const amt = Number(e.amount) || 0;
+    const kind = vishnuKindOf(e);
+    let chipClass, chipLabel, effAmt;
+    if(kind === 'house_for_vishnu'){
+      chipClass = 'vishnu'; chipLabel = 'Your item on the house bill'; effAmt = amt;
+    } else if(kind === 'vishnu_personal_for'){
+      chipClass = e.target || 'vishnu'; chipLabel = `You paid — ${e.target==='azad'?'Azad':'Irshad'}'s personal item`; effAmt = -amt;
+    } else {
+      chipClass = e.assignTo || 'irshad'; chipLabel = `You paid — mess, credited to ${e.assignTo==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
+    }
     return `
       <tr>
         <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-        <td>${payerLabel}</td>
+        <td><span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span></td>
         <td>${e.description || ''}</td>
-        <td class="num" style="color:${isCredit ? 'var(--emerald)' : 'inherit'};">${fmt(e.amount)}</td>
+        <td class="num" style="color:${effAmt < 0 ? 'var(--emerald)' : 'inherit'};">${fmt(effAmt)}</td>
       </tr>`;
   }).join('');
 

@@ -317,7 +317,7 @@ tr:last-child td{border-bottom:none;}
         <button class="btn btn-emerald" id="openVishnuSettleBtn">Settle with Vishnu →</button>
       </div>
 
-      <div class="info-note">These entries never enter the Irshad/Azad monthly split. Link any item below to your personal bill if it was included in your total checkout, so your payment gets credited properly[cite: 1, 4].</div>
+      <div class="info-note">These entries never enter the Irshad/Azad monthly split. Link any item below to your personal bill if it was included in your total checkout, so your payment gets credited properly[cite: 1].</div>
 
       <div class="widgets" style="grid-template-columns:repeat(3,1fr);">
         <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu Owes (Total)</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
@@ -728,9 +728,25 @@ function setVishnuPayer(p){
 }
 
 function renderVishnu(){
-  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  document.getElementById('vTotal').textContent = fmt(irshadV+azadV);
+  // FIX: Vishnu Net Sum calculation.
+  // If Vishnu paid, it acts as a credit (negative effect on what Vishnu owes).
+  // If someone else paid for Vishnu, it acts as a debit (positive effect on what Vishnu owes).
+  let netVishnuOwes = 0;
+  let irshadV = 0;
+  let azadV = 0;
+
+  liveVishnu.forEach(e => {
+    const amt = Number(e.amount) || 0;
+    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+      netVishnuOwes -= amt;
+    } else {
+      netVishnuOwes += amt;
+      if (e.paidBy === 'irshad') irshadV += amt;
+      if (e.paidBy === 'azad') azadV += amt;
+    }
+  });
+
+  document.getElementById('vTotal').textContent = fmt(netVishnuOwes);
   document.getElementById('vIrshad').textContent = fmt(irshadV);
   document.getElementById('vAzad').textContent = fmt(azadV);
   document.getElementById('vCount').textContent = `${liveVishnu.length} entries`;
@@ -741,18 +757,24 @@ function renderVishnu(){
     wrap.innerHTML = `<div class="empty-state"><span class="big">🤝</span>Nothing on Vishnu's tab right now.</div>`;
     return;
   }
-  let rows = liveVishnu.map(e=>`
+  let rows = liveVishnu.map(e=>{
+    const amt = Number(e.amount) || 0;
+    const isVP = e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'));
+    const effAmt = isVP ? -amt : amt;
+    return `
     <tr>
       <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy==='irshad'?'Irshad':'Azad'} paid</span></td>
+      <td><span class="who-chip ${e.paidBy||'irshad'}"><span class="dot"></span>${isVP ? 'Vishnu Paid' : ((e.paidBy==='azad'?'Azad':'Irshad') + ' paid')}</span></td>
       <td>${escapeHtml(e.description||'')} ${e.includeInBill==='yes' ? '<span style="font-size:11px;background:var(--brass-tint);padding:2px 6px;border-radius:4px;color:var(--brass);">Linked to bill</span>':''}</td>
-      <td class="num">${fmt(e.amount)}</td>
+      <td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td>
       <td><button class="btn-danger-text" onclick="deleteVishnu('${e.id}')">Remove</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
+
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Type / Payer</th><th>Description</th><th class="num">Amount / Effect</th><th></th></tr></thead>
     <tbody>${rows}
-      <tr class="total-row"><td colspan="3">Vishnu Owes</td><td class="num">${fmt(irshadV+azadV)}</td><td></td></tr>
+      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(netVishnuOwes)}</td><td></td></tr>
     </tbody></table>`;
 }
 
@@ -778,25 +800,47 @@ async function deleteVishnu(id){
 
 function openVishnuSettleModal(){
   if(liveVishnu.length===0){ showToast('Nothing to settle yet.'); return; }
-  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
+  let netVishnuOwes = 0;
+  let irshadV = 0;
+  let azadV = 0;
+  liveVishnu.forEach(e => {
+    const amt = Number(e.amount) || 0;
+    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+      netVishnuOwes -= amt;
+    } else {
+      netVishnuOwes += amt;
+      if (e.paidBy === 'irshad') irshadV += amt;
+      if (e.paidBy === 'azad') azadV += amt;
+    }
+  });
   document.getElementById('vishnuSettleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;">
       <div><label>Paid by Irshad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(irshadV)}</div></div>
       <div><label>Paid by Azad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(azadV)}</div></div>
     </div>
-    <div style="margin-top:10px;"><label>Vishnu Owes (Total)</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(irshadV+azadV)}</div></div>
+    <div style="margin-top:10px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
     <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming archives these ${liveVishnu.length} entries to History and clears the tab.</p>
   `;
   openModal('vishnuSettleModal');
 }
 
 async function confirmVishnuSettle(){
-  const irshadV = liveVishnu.filter(e=>e.paidBy==='irshad').reduce((s,e)=>s+Number(e.amount),0);
-  const azadV = liveVishnu.filter(e=>e.paidBy==='azad').reduce((s,e)=>s+Number(e.amount),0);
-  const snapshotExpenses = liveVishnu.map(e=>({paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date, includeInBill:e.includeInBill}));
+  let netVishnuOwes = 0;
+  let irshadV = 0;
+  let azadV = 0;
+  liveVishnu.forEach(e => {
+    const amt = Number(e.amount) || 0;
+    if (e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'))) {
+      netVishnuOwes -= amt;
+    } else {
+      netVishnuOwes += amt;
+      if (e.paidBy === 'irshad') irshadV += amt;
+      if (e.paidBy === 'azad') azadV += amt;
+    }
+  });
+  const snapshotExpenses = liveVishnu.map(e=>({paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date, includeInBill:e.includeInBill, isVishnuPaid:e.isVishnuPaid}));
   await db.collection('vishnuHistory').add({
-    total: irshadV+azadV, paidByIrshad: irshadV, paidByAzad: azadV,
+    total: netVishnuOwes, paidByIrshad: irshadV, paidByAzad: azadV,
     expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -853,10 +897,15 @@ function renderHistoryVishnu(){
   }
   wrap.innerHTML = vishnuHistoryCache.map(c=>{
     const dt = c.settledAt && c.settledAt.toDate ? c.settledAt.toDate() : new Date();
-    const rows = (c.expenses||[]).map(e=>`
+    const rows = (c.expenses||[]).map(e=>{
+      const amt = Number(e.amount) || 0;
+      const isVP = e.isVishnuPaid || (e.description && e.description.toLowerCase().includes('[vishnu paid]'));
+      const effAmt = isVP ? -amt : amt;
+      return `
       <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.paidBy}"><span class="dot"></span>${e.paidBy==='irshad'?'Irshad':'Azad'} paid</span></td>
-      <td>${escapeHtml(e.description||'')}</td><td class="num">${fmt(e.amount)}</td></tr>`).join('');
+      <td><span class="who-chip ${e.paidBy||'irshad'}"><span class="dot"></span>${isVP ? 'Vishnu Paid' : ((e.paidBy==='azad'?'Azad':'Irshad') + ' paid')}</span></td>
+      <td>${escapeHtml(e.description||'')}</td><td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td></tr>`;
+    }).join('');
     return `<div class="hist-item" id="hv-${c.id}">
       <div class="hist-head" onclick="toggleHist('hv-${c.id}')">
         <div><div class="hist-title">Settled ${fmtDate(dt)}</div><div class="hist-meta">${(c.expenses||[]).length} entries</div></div>
@@ -867,7 +916,7 @@ function renderHistoryVishnu(){
           <div><label>Paid by Irshad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByIrshad)}</div></div>
           <div><label>Paid by Azad</label><div class="mono" style="font-weight:600;">${fmt(c.paidByAzad)}</div></div>
         </div>
-        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Type / Payer</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead><tbody>${rows}</tbody></table>
       </div>
     </div>`;
   }).join('');

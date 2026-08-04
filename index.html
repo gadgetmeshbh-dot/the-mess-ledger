@@ -10,6 +10,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 /* ============ TOKENS ============ */
@@ -109,6 +111,9 @@ button{font-family:inherit;cursor:pointer;}
 .widget-bar{position:absolute;left:0;top:0;bottom:0;width:4px;}
 .widget-bar.irshad{background:var(--irshad);}
 .widget-bar.azad{background:var(--azad);}
+.widget-clickable{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;}
+.widget-clickable:hover{box-shadow:0 1px 2px rgba(20,31,39,0.08), 0 10px 26px -12px rgba(20,31,39,0.28);}
+.widget-clickable:active{transform:scale(0.98);}
 
 /* stamp — signature element */
 .stamp{
@@ -243,6 +248,26 @@ tr:last-child td{border-bottom:none;}
 .split-editor-actions{margin-top:10px;text-align:right;}
 .split-reset-btn{background:none;border:1px solid var(--rule);border-radius:6px;padding:5px 10px;font-size:11.5px;font-weight:600;color:var(--ink-soft);}
 .split-reset-btn:hover{border-color:var(--ink);color:var(--ink);}
+.vsettle-list{max-height:300px;overflow-y:auto;border:1px solid var(--rule);border-radius:8px;-webkit-overflow-scrolling:touch;}
+.vsettle-row{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border-bottom:1px solid var(--rule);cursor:pointer;}
+.vsettle-row:last-child{border-bottom:none;}
+.vsettle-row:hover{background:var(--paper);}
+.vsettle-row input{margin-top:4px;width:15px;height:15px;accent-color:var(--emerald);flex-shrink:0;}
+.vsettle-row-body{flex:1;min-width:0;}
+
+/* ---- Advanced Report ---- */
+.report-sheet{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:26px 24px;box-shadow:var(--shadow);}
+.report-sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:16px;flex-wrap:wrap;}
+.report-sheet-summary{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:18px;padding:14px 16px;background:var(--paper);border-radius:8px;border:1px solid var(--rule);}
+.report-sheet-summary .lbl{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;}
+.report-sheet-summary .val{display:block;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;margin-top:2px;}
+.report-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:6px;}
+.report-sheet h4{font-family:'Fraunces',serif;}
+@media (max-width:600px){
+  .report-sheet{padding:16px 12px;}
+  .report-sheet table{font-size:11.5px;}
+  .report-sheet th,.report-sheet td{padding:6px 6px;}
+}
 .tag-badge{font-size:11px;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:600;display:inline-block;background:var(--vishnu-tint);color:var(--vishnu);}
 .tag-badge.split{background:var(--brass-tint);color:#6B4E17;}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:9px;font-size:13.5px;font-weight:500;box-shadow:var(--shadow);z-index:200;display:none;}
@@ -340,15 +365,14 @@ tr:last-child td{border-bottom:none;}
 
       <div class="widgets">
         <!-- Left column -->
-        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent <span class="tag-badge split" id="wTotalNote" style="display:none;margin-left:4px;">excl. Vishnu</span></div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
+        <div class="widget widget-clickable" onclick="showWidgetDetail('total')"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent</div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
         <!-- Right column -->
-        <div class="widget"><div class="widget-bar" style="background:var(--brass);"></div><div class="widget-label">Per Person Share</div><div class="widget-value mono" id="wPerPerson">BHD 0.000</div><div class="widget-sub" id="wPerPersonSub">Total split 2 ways</div></div>
+        <div class="widget widget-clickable" onclick="showWidgetDetail('share')"><div class="widget-bar" style="background:var(--brass);"></div><div class="widget-label">Per Person Share</div><div class="widget-value mono" id="wPerPerson">BHD 0.000</div><div class="widget-sub" id="wPerPersonSub">Total split 2 ways</div></div>
 
-        <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
-        <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
+        <div class="widget widget-clickable" onclick="showWidgetDetail('irshad')"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
+        <div class="widget widget-clickable" onclick="showWidgetDetail('azad')"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
 
-        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
-        <div class="widget" id="wVishnuWidget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
+        <div class="widget balance settled widget-clickable" id="wBalanceCard" onclick="showWidgetDetail('balance')"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
       </div>
 
       <div class="card">
@@ -546,6 +570,52 @@ tr:last-child td{border-bottom:none;}
       </div>
 
       <div class="card">
+        <div class="card-head"><h3>Advanced Report — Irshad &amp; Azad</h3></div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;">A professional, filterable transaction report with cumulative running totals for Irshad and Azad. Vishnu's tab isn't included here — it's tracked separately.</p>
+
+          <div class="form-row">
+            <div><label>Person</label>
+              <select id="advPersonFilter">
+                <option value="">All (Irshad &amp; Azad)</option>
+                <option value="irshad">Irshad only</option>
+                <option value="azad">Azad only</option>
+              </select>
+            </div>
+            <div><label>Category</label>
+              <select id="advCategoryFilter">
+                <option value="">All Categories</option>
+                <option>Groceries</option><option>Vegetables</option><option>Gas / LPG</option>
+                <option>Utilities</option><option>Cleaning</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div><label>From</label><input type="date" id="advFrom"></div>
+            <div><label>To</label><input type="date" id="advTo"></div>
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr;">
+            <div><label>Sort by</label>
+              <select id="advSort">
+                <option value="date_desc">Date — Newest first</option>
+                <option value="date_asc">Date — Oldest first</option>
+                <option value="amount_desc">Amount — High to low</option>
+                <option value="amount_asc">Amount — Low to high</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-ghost" onclick="clearAdvReportFilters()">↺ Clear Filters</button>
+            <button class="btn btn-primary" onclick="viewAdvReport()">👁 View Report</button>
+            <button class="btn btn-emerald" onclick="downloadAdvReportPDF()">⬇ Download PDF</button>
+          </div>
+
+          <div id="advReportPreview" style="display:none;margin-top:20px;"></div>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-head"><h3>Monthly Total — Irshad vs Azad</h3></div>
         <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
       </div>
@@ -587,6 +657,31 @@ tr:last-child td{border-bottom:none;}
     <div class="modal-body" id="entryDetailModalBody"></div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('entryDetailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="widgetDetailModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head"><h3 id="widgetDetailModalTitle">Details</h3><p id="widgetDetailModalSub"></p></div>
+    <div class="modal-body" id="widgetDetailModalBody" style="padding:0 22px 18px;"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('widgetDetailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="passwordModal">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-head"><h3>Confirm Removal</h3><p>Enter the password to remove this entry.</p></div>
+    <div class="modal-body">
+      <label>Password</label>
+      <input type="password" id="removePasswordInput" placeholder="••••" inputmode="numeric" maxlength="8" onkeydown="if(event.key==='Enter')confirmPasswordAction();">
+      <p id="removePasswordError" style="color:var(--rose);font-size:12px;margin-top:8px;display:none;">Incorrect password. Try again.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('passwordModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPasswordAction()">Confirm</button>
     </div>
   </div>
 </div>
@@ -1122,7 +1217,6 @@ function renderDashboard(){
   document.getElementById('wDaysLeft').textContent = today > end ? 'Cycle ended — settle when ready' : `${daysLeft} day${daysLeft===1?'':'s'} left in cycle`;
 
   const {net, spent, messSpent, shareOwed} = computeNetBalances(liveExpenses);
-  const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
   const total = computeMessTotal(liveExpenses); // excludes Vishnu's share — this is what Irshad & Azad split
 
   document.getElementById('wTotal').textContent = fmt(total);
@@ -1142,26 +1236,110 @@ function renderDashboard(){
   const balVal = document.getElementById('wBalance');
   const balSub = document.getElementById('wBalanceSub');
   if(liveExpenses.length === 0 || Math.abs(irshadDiff) < 0.0005){
-    balCard.className = 'widget balance settled';
+    balCard.className = 'widget balance settled widget-clickable';
     balVal.textContent = 'Settled';
     balSub.textContent = liveExpenses.length===0 ? 'No expenses logged yet' : 'Everyone paid their share';
   } else if(irshadDiff > 0){
-    balCard.className = 'widget balance owed';
+    balCard.className = 'widget balance owed widget-clickable';
     balVal.textContent = fmt(irshadDiff);
     balSub.textContent = 'Azad owes Irshad';
   } else {
-    balCard.className = 'widget balance owed';
+    balCard.className = 'widget balance owed widget-clickable';
     balVal.textContent = fmt(azadDiff);
     balSub.textContent = 'Irshad owes Azad';
   }
 
-  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
-  document.getElementById('wTotalNote').style.display = vishnuShareTotal > 0.0005 ? '' : 'none';
-  document.getElementById('wVishnu').textContent = fmt(vishnuShareTotal);
-  const vCount = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu')).length;
-  document.getElementById('wVishnuCount').textContent = vishnuInvolved ? `${vCount} entries · not counted above` : 'Not involved this cycle';
-
   renderExpenseTable();
+}
+
+/* ---------------- Widget tap-through detail modal ---------------- */
+function buildReadOnlyEntryRow(e){
+  const isMarkedByVishnu = e.description && e.description.includes('[Marked by Vishnu]');
+  const cleanDesc = isMarkedByVishnu ? e.description.replace('[Marked by Vishnu]', '').trim() : (e.description || '(no description)');
+  return `
+  <div class="entry-row">
+    <div class="entry-row-top">
+      <div class="entry-row-who"><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></div>
+      <span class="entry-amount">${fmt(e.amount)}</span>
+    </div>
+    <div class="entry-row-desc">${escapeHtml(cleanDesc)} <span class="cat">· ${escapeHtml(e.category||'')}</span></div>
+    <div class="entry-row-meta"><span class="entry-date">${fmtDate(new Date(e.date))} · ${fmtTime(e.time)}</span></div>
+  </div>`;
+}
+
+function showWidgetDetail(type){
+  const total = computeMessTotal(liveExpenses);
+  const {messSpent, shareOwed} = computeNetBalances(liveExpenses);
+  let title, sub, bodyHtml;
+
+  if(type==='total'){
+    title = 'Total Spent This Cycle';
+    sub = 'Every mess entry contributing to the cycle total.';
+    const rows = liveExpenses.length ? liveExpenses.map(buildReadOnlyEntryRow).join('') : `<div class="empty-state"><span class="big">🧾</span>No entries yet.</div>`;
+    bodyHtml = `<div class="entry-list">${rows}${liveExpenses.length ? `<div class="entry-total-row"><span>Cycle Total</span><span class="entry-amount">${fmt(total)}</span></div>` : ''}</div>`;
+  } else if(type==='share'){
+    title = 'Per Person Share';
+    sub = 'The cycle total, split evenly two ways.';
+    bodyHtml = `<div class="entry-list">
+      <div class="detail-row"><span class="detail-label">Cycle Total</span><span class="detail-value mono">${fmt(total)}</span></div>
+      <div class="detail-row"><span class="detail-label">Irshad's Share</span><span class="detail-value mono">${fmt(total/2)}</span></div>
+      <div class="detail-row"><span class="detail-label">Azad's Share</span><span class="detail-value mono">${fmt(total/2)}</span></div>
+    </div>`;
+  } else if(type==='irshad' || type==='azad'){
+    const list = liveExpenses.filter(e=> e.person===type);
+    title = `${personLabel(type)} Spent`;
+    sub = `Every entry paid by ${personLabel(type)} this cycle.`;
+    const rows = list.length ? list.map(buildReadOnlyEntryRow).join('') : `<div class="empty-state"><span class="big">🧾</span>No entries yet.</div>`;
+    const sum = list.reduce((s,e)=> s + (Number(e.amount)||0), 0);
+    bodyHtml = `<div class="entry-list">${rows}${list.length ? `<div class="entry-total-row"><span>Total Paid by ${personLabel(type)}</span><span class="entry-amount">${fmt(sum)}</span></div>` : ''}</div>`;
+  } else if(type==='balance'){
+    const irshadDiff = messSpent.irshad - (shareOwed.irshad||0);
+    title = 'Balance';
+    sub = 'Who owes whom, based on entries logged so far.';
+    let line;
+    if(liveExpenses.length===0 || Math.abs(irshadDiff) < 0.0005){
+      line = `<div class="empty-state"><span class="big">✓</span>Settled — nothing owed right now.</div>`;
+    } else if(irshadDiff > 0){
+      line = `<div class="settlement-line">Azad owes Irshad <b>${fmt(irshadDiff)}</b></div>`;
+    } else {
+      line = `<div class="settlement-line">Irshad owes Azad <b>${fmt(-irshadDiff)}</b></div>`;
+    }
+    bodyHtml = `<div class="entry-list" style="border:none;">
+      <div class="detail-row"><span class="detail-label">Irshad Spent</span><span class="detail-value mono">${fmt(messSpent.irshad)}</span></div>
+      <div class="detail-row"><span class="detail-label">Azad Spent</span><span class="detail-value mono">${fmt(messSpent.azad)}</span></div>
+      <div style="margin-top:14px;">${line}</div>
+    </div>`;
+  }
+
+  document.getElementById('widgetDetailModalTitle').textContent = title;
+  document.getElementById('widgetDetailModalSub').textContent = sub;
+  document.getElementById('widgetDetailModalBody').innerHTML = bodyHtml;
+  openModal('widgetDetailModal');
+}
+
+/* ---------------- Password-gated removal ---------------- */
+const REMOVE_PASSWORD = '4567';
+let pendingRemoveAction = null;
+
+function requestRemoveConfirm(action){
+  pendingRemoveAction = action;
+  const input = document.getElementById('removePasswordInput');
+  input.value = '';
+  document.getElementById('removePasswordError').style.display = 'none';
+  openModal('passwordModal');
+  setTimeout(()=> input.focus(), 120);
+}
+
+function confirmPasswordAction(){
+  const input = document.getElementById('removePasswordInput');
+  if(input.value !== REMOVE_PASSWORD){
+    document.getElementById('removePasswordError').style.display = 'block';
+    return;
+  }
+  closeModal('passwordModal');
+  const action = pendingRemoveAction;
+  pendingRemoveAction = null;
+  if(action) action();
 }
 
 function renderExpenseTable(){
@@ -1372,8 +1550,10 @@ async function addExpense(){
 }
 
 async function deleteExpense(id){
-  if(!confirm('Remove this entry?')) return;
-  await db.collection('expenses').doc(id).delete();
+  requestRemoveConfirm(async ()=>{
+    await db.collection('expenses').doc(id).delete();
+    showToast('Entry removed.');
+  });
 }
 
 /* ---------------- Settle cycle ---------------- */
@@ -1646,37 +1826,111 @@ async function addHouseForVishnu(){
 }
 
 async function deleteVishnu(id){
-  if(!confirm('Remove this entry?')) return;
-  await db.collection('vishnuExpenses').doc(id).delete();
+  requestRemoveConfirm(async ()=>{
+    await db.collection('vishnuExpenses').doc(id).delete();
+    showToast('Entry removed.');
+  });
 }
 
 function openVishnuSettleModal(){
   if(liveVishnu.length===0){ showToast('Nothing to settle yet.'); return; }
   const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
+
+  const rows = liveVishnu.map(e=>{
+    const amt = Number(e.amount) || 0;
+    const kind = vishnuKindOf(e);
+    let chipClass, chipLabel, effAmt;
+    if(kind === 'house_for_vishnu'){
+      chipClass = e.paidBy || 'irshad'; chipLabel = `Vishnu owes ${e.paidBy==='azad'?'Azad':'Irshad'}`; effAmt = amt;
+    } else if(kind === 'vishnu_personal_for'){
+      chipClass = e.target || 'vishnu'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
+    } else {
+      chipClass = e.assignTo || 'irshad'; chipLabel = `${e.assignTo==='azad'?'Azad':'Irshad'} credited`; effAmt = -amt;
+    }
+    return `
+    <label class="vsettle-row">
+      <input type="checkbox" class="vsettle-check" value="${e.id}" data-amt="${effAmt}" checked onchange="updateVishnuSettleSummary()">
+      <div class="vsettle-row-body">
+        <div class="entry-row-top" style="margin-bottom:2px;">
+          <span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span>
+          <span class="entry-amount" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</span>
+        </div>
+        <div class="entry-row-desc" style="font-size:12.5px;">${escapeHtml(e.description||'')} <span class="entry-date">· ${fmtDate(new Date(e.date))}</span></div>
+      </div>
+    </label>`;
+  }).join('');
+
   document.getElementById('vishnuSettleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;">
       <div><label>Vishnu Owes Irshad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(owedToIrshad)}</div></div>
       <div><label>Vishnu Owes Azad</label><div class="mono" style="font-size:16px;font-weight:600;">${fmt(owedToAzad)}</div></div>
     </div>
-    <div style="margin-top:10px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
-    <p style="font-size:12px;color:var(--ink-soft);margin-top:12px;">Confirming archives these ${liveVishnu.length} entries to History and clears the tab.</p>
+    <div style="margin-top:10px;margin-bottom:16px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
+
+    <div class="split-row-head">
+      <label style="margin:0;">Mark entries as received</label>
+      <button type="button" class="split-toggle-link" onclick="toggleAllVishnuSettle()">Toggle all</button>
+    </div>
+    <div class="vsettle-list">${rows}</div>
+    <div class="entry-total-row" style="margin-top:10px;border-radius:8px;">
+      <span>Selected — will be marked received (nil)</span>
+      <span class="entry-amount" id="vsettleSelectedTotal">${fmt(netVishnuOwes)}</span>
+    </div>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 0;">Unchecked entries stay outstanding on Vishnu's tab. Checked entries are archived to History and their balance becomes nil.</p>
   `;
   openModal('vishnuSettleModal');
 }
 
+function toggleAllVishnuSettle(){
+  const boxes = document.querySelectorAll('.vsettle-check');
+  const allChecked = Array.from(boxes).every(b=> b.checked);
+  boxes.forEach(b=> b.checked = !allChecked);
+  updateVishnuSettleSummary();
+}
+
+function updateVishnuSettleSummary(){
+  const boxes = document.querySelectorAll('.vsettle-check:checked');
+  let sum = 0;
+  boxes.forEach(b=> sum += Number(b.dataset.amt) || 0);
+  document.getElementById('vsettleSelectedTotal').textContent = fmt(sum);
+}
+
 async function confirmVishnuSettle(){
-  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
-  const snapshotExpenses = liveVishnu.map(e=>({kind:vishnuKindOf(e), assignTo:e.assignTo, target:e.target, paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date}));
+  const boxes = Array.from(document.querySelectorAll('.vsettle-check:checked'));
+  if(boxes.length===0){ showToast('Select at least one entry to mark as received.'); return; }
+  const selectedIds = boxes.map(b=> b.value);
+  const selectedEntries = liveVishnu.filter(e=> selectedIds.includes(e.id));
+
+  let owedToIrshad = 0, owedToAzad = 0;
+  selectedEntries.forEach(e=>{
+    const amt = Number(e.amount) || 0;
+    const kind = vishnuKindOf(e);
+    if(kind === 'house_for_vishnu'){
+      if(e.paidBy==='azad') owedToAzad += amt; else owedToIrshad += amt;
+    } else if(kind === 'vishnu_personal_for'){
+      if(e.target==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
+    } else {
+      if(e.assignTo==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
+    }
+  });
+  const netTotal = owedToIrshad + owedToAzad;
+
+  const snapshotExpenses = selectedEntries.map(e=>({kind:vishnuKindOf(e), assignTo:e.assignTo, target:e.target, paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date}));
   await db.collection('vishnuHistory').add({
-    total: netVishnuOwes, owedToIrshad, owedToAzad,
+    total: netTotal, owedToIrshad, owedToAzad,
     expenses: snapshotExpenses,
     settledAt: firebase.firestore.FieldValue.serverTimestamp()
   });
+
   const batch = db.batch();
-  liveVishnu.forEach(e=> batch.update(db.collection('vishnuExpenses').doc(e.id), {settled:true}));
+  selectedEntries.forEach(e=> batch.update(db.collection('vishnuExpenses').doc(e.id), {settled:true}));
   await batch.commit();
+
   closeModal('vishnuSettleModal');
-  showToast('Vishnu\'s tab settled and archived.');
+  const remaining = liveVishnu.length - selectedEntries.length;
+  showToast(remaining > 0
+    ? `${selectedEntries.length} entr${selectedEntries.length===1?'y':'ies'} marked received. ${remaining} still outstanding.`
+    : `All selected entries marked received — tab cleared.`);
 }
 
 /* ---------------- History ---------------- */
@@ -1916,6 +2170,205 @@ async function sendStatementWhatsApp(){
   const phone = document.getElementById('stmtPhone').value.trim().replace(/[^0-9]/g,'');
   const url = (phone ? `https://wa.me/${phone}` : `https://wa.me/`) + `?text=${encodeURIComponent(text)}`;
   window.open(url, '_blank');
+}
+
+/* ---------------- Advanced Report (Irshad & Azad only, no Vishnu) ---------------- */
+const ADV_SORT_LABELS = {
+  date_desc: 'Date, newest first', date_asc: 'Date, oldest first',
+  amount_desc: 'Amount, high to low', amount_asc: 'Amount, low to high'
+};
+
+// Pulls every Irshad/Azad transaction across the current cycle AND all
+// settled history — Vishnu-paid entries and anything marked/synced from
+// his tab are stripped out entirely, since his tab is tracked separately.
+function getAllPersonExpenses(){
+  const fromLive = liveExpenses.map(e=> ({...e}));
+  const fromHistory = cycleHistoryCache.flatMap(c=> (c.expenses||[]).map(e=> ({...e})));
+  return [...fromLive, ...fromHistory].filter(e=>
+    e.person !== 'vishnu' && !(e.description||'').includes('[Marked by Vishnu]')
+  );
+}
+
+function getAdvReportFilters(){
+  return {
+    person: document.getElementById('advPersonFilter').value,
+    category: document.getElementById('advCategoryFilter').value,
+    from: document.getElementById('advFrom').value,
+    to: document.getElementById('advTo').value,
+    sort: document.getElementById('advSort').value
+  };
+}
+
+function clearAdvReportFilters(){
+  document.getElementById('advPersonFilter').value = '';
+  document.getElementById('advCategoryFilter').value = '';
+  document.getElementById('advFrom').value = '';
+  document.getElementById('advTo').value = '';
+  document.getElementById('advSort').value = 'date_desc';
+  document.getElementById('advReportPreview').style.display = 'none';
+}
+
+function filterAndSortAdvReport(){
+  const f = getAdvReportFilters();
+  let list = getAllPersonExpenses();
+  if(f.person) list = list.filter(e=> e.person === f.person);
+  if(f.category) list = list.filter(e=> (e.category||'') === f.category);
+  if(f.from) list = list.filter(e=> e.date >= f.from);
+  if(f.to) list = list.filter(e=> e.date <= f.to);
+
+  list = [...list];
+  if(f.sort === 'date_asc') list.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  else if(f.sort === 'amount_desc') list.sort((a,b)=> (Number(b.amount)||0) - (Number(a.amount)||0));
+  else if(f.sort === 'amount_asc') list.sort((a,b)=> (Number(a.amount)||0) - (Number(b.amount)||0));
+  else list.sort((a,b)=> a.date < b.date ? 1 : a.date > b.date ? -1 : 0); // date_desc default
+
+  return list;
+}
+
+// Chronological running total for one person, independent of whatever sort
+// the main table is using — cumulative totals always read oldest → newest.
+function buildCumulativeDataFor(person){
+  const list = getAllPersonExpenses()
+    .filter(e=> e.person === person)
+    .sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  let running = 0;
+  const rows = list.map(e=>{
+    running += Number(e.amount) || 0;
+    return {date:e.date, description:(e.description||'').replace('[Marked by Vishnu]','').trim(), amount:Number(e.amount)||0, running};
+  });
+  return {rows, total: running, count: rows.length};
+}
+
+function viewAdvReport(){
+  const f = getAdvReportFilters();
+  const list = filterAndSortAdvReport();
+  const totalIrshad = list.filter(e=>e.person==='irshad').reduce((s,e)=> s + (Number(e.amount)||0), 0);
+  const totalAzad = list.filter(e=>e.person==='azad').reduce((s,e)=> s + (Number(e.amount)||0), 0);
+  const grand = totalIrshad + totalAzad;
+
+  const rowsHtml = list.length ? list.map(e=> `
+    <tr>
+      <td class="mono" style="white-space:nowrap;">${fmtDate(new Date(e.date))}</td>
+      <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
+      <td>${escapeHtml(e.category||'—')}</td>
+      <td>${escapeHtml((e.description||'').replace('[Marked by Vishnu]','').trim() || '—')}</td>
+      <td class="num">${fmt(e.amount)}</td>
+    </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:24px;">No transactions match these filters.</td></tr>`;
+
+  const cumTableHtml = (label, data)=> `
+    <h4 style="font-size:14px;margin:20px 0 8px;">${label} — Cumulative Transactions <span style="font-weight:400;font-size:12px;color:var(--ink-soft);">(${data.count} entries)</span></h4>
+    <div class="report-table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th class="num">Running Total</th></tr></thead>
+        <tbody>${data.rows.length ? data.rows.map(r=> `
+          <tr><td class="mono">${fmtDate(new Date(r.date))}</td><td>${escapeHtml(r.description||'—')}</td><td class="num">${fmt(r.amount)}</td><td class="num" style="font-weight:700;">${fmt(r.running)}</td></tr>
+        `).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--ink-soft);padding:16px;">No entries.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
+  const irshadCum = buildCumulativeDataFor('irshad');
+  const azadCum = buildCumulativeDataFor('azad');
+
+  document.getElementById('advReportPreview').innerHTML = `
+    <div class="report-sheet">
+      <div class="report-sheet-head">
+        <div>
+          <div class="serif" style="font-weight:700;font-size:20px;">Mess Ledger</div>
+          <div style="font-size:11px;color:var(--ink-soft);letter-spacing:.04em;text-transform:uppercase;">Detailed Transaction Report</div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--ink-soft);line-height:1.6;">
+          Generated ${new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}<br>
+          ${f.person?personLabel(f.person):'Irshad & Azad'} · ${f.category||'All Categories'}<br>
+          ${f.from?fmtDate(new Date(f.from)):'Start'} → ${f.to?fmtDate(new Date(f.to)):'Today'} · Sorted by ${ADV_SORT_LABELS[f.sort]||'Date'}
+        </div>
+      </div>
+      <div class="report-sheet-summary">
+        <div><span class="lbl">Irshad Total</span><span class="val">${fmt(totalIrshad)}</span></div>
+        <div><span class="lbl">Azad Total</span><span class="val">${fmt(totalAzad)}</span></div>
+        <div><span class="lbl">Grand Total</span><span class="val">${fmt(grand)}</span></div>
+        <div><span class="lbl">Entries</span><span class="val">${list.length}</span></div>
+      </div>
+      <div class="report-table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Paid By</th><th>Category</th><th>Description</th><th class="num">Amount</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      ${cumTableHtml('Irshad', irshadCum)}
+      ${cumTableHtml('Azad', azadCum)}
+    </div>
+  `;
+  const preview = document.getElementById('advReportPreview');
+  preview.style.display = 'block';
+  preview.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function downloadAdvReportPDF(){
+  if(!window.jspdf || !window.jspdf.jsPDF){ showToast('PDF library failed to load — check your connection and try again.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const f = getAdvReportFilters();
+  const list = filterAndSortAdvReport();
+  const marginX = 40;
+  let y = 48;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(20,31,39);
+  doc.text('Mess Ledger — Transaction Report', marginX, y);
+  y += 16;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(75,90,99);
+  doc.text(`Generated ${new Date().toLocaleString('en-GB')}`, marginX, y);
+  y += 13;
+  doc.text(`Filters — Person: ${f.person?personLabel(f.person):'Irshad & Azad'}  ·  Category: ${f.category||'All'}  ·  Range: ${f.from||'Start'} to ${f.to||'Today'}  ·  Sort: ${ADV_SORT_LABELS[f.sort]||'Date'}`, marginX, y);
+  y += 22;
+
+  const totalIrshad = list.filter(e=>e.person==='irshad').reduce((s,e)=> s + (Number(e.amount)||0), 0);
+  const totalAzad = list.filter(e=>e.person==='azad').reduce((s,e)=> s + (Number(e.amount)||0), 0);
+  const grand = totalIrshad + totalAzad;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10.5); doc.setTextColor(20,31,39);
+  doc.text(`Irshad Total: BHD ${totalIrshad.toFixed(3)}`, marginX, y);
+  doc.text(`Azad Total: BHD ${totalAzad.toFixed(3)}`, marginX+190, y);
+  doc.text(`Grand Total: BHD ${grand.toFixed(3)}`, marginX+360, y);
+  y += 16;
+
+  doc.autoTable({
+    startY: y,
+    head: [['Date','Paid By','Category','Description','Amount (BHD)']],
+    body: list.length ? list.map(e=> [
+      fmtDate(new Date(e.date)), personLabel(e.person), e.category||'—',
+      (e.description||'').replace('[Marked by Vishnu]','').trim() || '—',
+      (Number(e.amount)||0).toFixed(3)
+    ]) : [['—','No transactions match these filters.','','','']],
+    styles:{ fontSize:8.5, cellPadding:4, textColor:[20,31,39] },
+    headStyles:{ fillColor:[20,31,39], textColor:255, fontStyle:'bold' },
+    alternateRowStyles:{ fillColor:[239,235,223] },
+    columnStyles:{4:{halign:'right'}},
+    margin:{left:marginX, right:marginX}
+  });
+
+  const addCumulativeSection = (label, data, color)=>{
+    let sy = doc.lastAutoTable.finalY + 26;
+    if(sy > 700){ doc.addPage(); sy = 50; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(20,31,39);
+    doc.text(`${label} — Cumulative Transactions`, marginX, sy);
+    doc.autoTable({
+      startY: sy + 8,
+      head: [['Date','Description','Amount','Running Total']],
+      body: data.rows.length ? data.rows.map(r=> [
+        fmtDate(new Date(r.date)), r.description || '—', r.amount.toFixed(3), r.running.toFixed(3)
+      ]) : [['—','No entries.','','']],
+      styles:{ fontSize:8.5, cellPadding:4, textColor:[20,31,39] },
+      headStyles:{ fillColor:color, textColor:255, fontStyle:'bold' },
+      alternateRowStyles:{ fillColor:[239,235,223] },
+      columnStyles:{2:{halign:'right'},3:{halign:'right',fontStyle:'bold'}},
+      margin:{left:marginX, right:marginX}
+    });
+  };
+
+  addCumulativeSection('Irshad', buildCumulativeDataFor('irshad'), [31,111,84]);
+  addCumulativeSection('Azad', buildCumulativeDataFor('azad'), [44,95,138]);
+
+  doc.save(`mess-ledger-report_${todayISO()}.pdf`);
+  showToast('PDF downloaded.');
 }
 
 /* ---------------- Charts ---------------- */

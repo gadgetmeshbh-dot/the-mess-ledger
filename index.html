@@ -208,13 +208,23 @@ tr:last-child td{border-bottom:none;}
   .sidebar.open{transform:translateX(0);}
   .menu-toggle{display:flex;}
   .main{margin-left:0;padding:80px 16px 60px;}
-  .form-row,.form-row.three{grid-template-columns:1fr;}
+  /* !important beats any inline grid-template-columns (e.g. the 4-col
+     Add Expense row, 3-col Vishnu row) so every form field stacks full
+     width and stays readable without zooming. */
+  .form-row,.form-row.three{grid-template-columns:1fr !important;}
+  .widgets-3{grid-template-columns:1fr !important;}
   .widget{padding:14px 12px 12px;}
   .widget-value{font-size:19px;}
+  .page-head h1{font-size:22px;}
+  input[type=text],input[type=number],input[type=date],input[type=time],select,textarea{font-size:16px;padding:10px 11px;}
+  table{font-size:13px;}
 }
 @media (max-width:420px){
-  .widgets{grid-template-columns:1fr;}
-  .widget.span2{grid-column:auto;}
+  .widgets{gap:10px;}
+  .widget{padding:12px 10px 11px;}
+  .widget-label{font-size:10.5px;}
+  .widget-value{font-size:17px;}
+  .widget-sub{font-size:11px;}
 }
 
 .info-note{background:var(--brass-tint);border:1px solid var(--brass);color:#6B4E17;border-radius:8px;padding:12px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.5;}
@@ -383,7 +393,7 @@ tr:last-child td{border-bottom:none;}
 
       <div class="info-note">Two kinds of entries live here. <b>Vishnu's personal item on our bill</b> — when he tags his own stuff onto our mess purchase — adds to what he owes. <b>Log what Vishnu spent/paid</b> — when he covers something and it's credited to Irshad or Azad — reduces what he owes, and also lands in this cycle's mess entries, tagged <b>By Vishnu</b>.</div>
 
-      <div class="widgets" style="grid-template-columns:repeat(3,1fr);">
+      <div class="widgets widgets-3" style="grid-template-columns:repeat(3,1fr);">
         <div class="widget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Net Balance Due from Vishnu</div><div class="widget-value mono" id="vTotal">BHD 0.000</div><div class="widget-sub" id="vCount">0 entries</div></div>
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Vishnu Owes Irshad</div><div class="widget-value mono" id="vIrshad">BHD 0.000</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Vishnu Owes Azad</div><div class="widget-value mono" id="vAzad">BHD 0.000</div></div>

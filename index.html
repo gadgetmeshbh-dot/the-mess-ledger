@@ -250,8 +250,41 @@ tr:last-child td{border-bottom:none;}
 .conn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
 .conn-dot.ok{background:#3EA574;}
 .conn-dot.bad{background:var(--rose);}
-.card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
-#expenseTableWrap,#histVishnuWrap,#histWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+/* ============ ENTRY LIST (replaces wide tables — no horizontal scroll, ever) ============ */
+.entry-list{display:flex;flex-direction:column;width:100%;min-width:0;}
+.entry-row{padding:13px 18px;border-bottom:1px solid var(--rule);display:flex;flex-direction:column;gap:5px;min-width:0;}
+.entry-row:last-child{border-bottom:none;}
+.entry-row-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;}
+.entry-row-who{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+.entry-amount{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:14.5px;white-space:nowrap;flex-shrink:0;}
+.entry-row-desc{font-size:13.5px;color:var(--ink);line-height:1.45;word-break:break-word;overflow-wrap:anywhere;}
+.entry-row-desc .cat{color:var(--ink-soft);font-size:11.5px;}
+.entry-row-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.entry-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);white-space:nowrap;}
+.entry-row .btn-danger-text{flex-shrink:0;padding:3px 4px;}
+.entry-total-row{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:700;border-top:2px double var(--ink);background:var(--paper);flex-wrap:wrap;}
+.entry-total-row .entry-amount{font-size:15px;}
+@media (max-width:480px){
+  .entry-row{padding:12px 14px;}
+  .entry-total-row{padding:12px 14px;}
+}
+.entry-row.tappable{cursor:pointer;}
+.entry-row.tappable:hover,.entry-row.tappable:active{background:var(--paper);}
+.entry-row-actions{display:flex;align-items:center;gap:12px;}
+.share-wa-btn{background:none;border:none;padding:2px;display:inline-flex;align-items:center;gap:5px;color:#25A25A;font-size:12px;font-weight:600;}
+.share-wa-btn svg{width:16px;height:16px;flex-shrink:0;}
+.share-wa-btn:hover{color:#1E8A4C;}
+
+/* ---- Entry detail modal ---- */
+.detail-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:10px 0;border-bottom:1px solid var(--rule);}
+.detail-row:last-child{border-bottom:none;}
+.detail-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;flex-shrink:0;padding-top:2px;}
+.detail-value{font-size:14px;font-weight:500;text-align:right;word-break:break-word;}
+.detail-value.mono{font-family:'IBM Plex Mono',monospace;}
+.detail-amount-hero{text-align:center;padding:6px 0 16px;}
+.detail-amount-hero .amt{font-family:'IBM Plex Mono',monospace;font-size:32px;font-weight:700;letter-spacing:-0.5px;}
+.detail-amount-hero .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-top:2px;}
 </style>
 </head>
 <body>
@@ -316,14 +349,6 @@ tr:last-child td{border-bottom:none;}
 
         <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
         <div class="widget" id="wVishnuWidget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
-      </div>
-
-      <div class="card" id="splitWidgetCard">
-        <div class="card-head"><h3>Spend Split — Share of Total</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="splitWidgetTotal">BHD 0.000</span></div>
-        <div class="card-body">
-          <div id="splitWidgetBar" style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--rule);margin-bottom:16px;"></div>
-          <div id="splitWidgetLegend" style="display:flex;gap:26px;flex-wrap:wrap;"></div>
-        </div>
       </div>
 
       <div class="card">
@@ -556,6 +581,16 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<div class="modal-backdrop" id="entryDetailModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head"><h3>Entry Details</h3><p>Full details for this expense.</p></div>
+    <div class="modal-body" id="entryDetailModalBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('entryDetailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="settingsModal">
   <div class="modal">
     <div class="modal-head"><h3>Connection Settings</h3><p>Paste your shared Firebase project keys so both phones sync to the same data. Do this once per device — see README for setup.</p></div>
@@ -728,6 +763,226 @@ async function notifyNewEntry(entry){
     showToast('Entry saved, but the notification email failed to send.');
   }
 }
+
+// Fires after a new entry is saved on Vishnu's tab (house_for_vishnu or
+// vishnu_personal_for). Notifies the roommate who didn't log it, so both
+// stay in the loop — mirrors notifyNewEntry's "tell the other person" rule.
+async function notifyVishnuTabEntry(entry, kind){
+  const cfg = getEmailConfig();
+  if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
+  if(!window.emailjs){ return; }
+
+  let toEmail, toName, fromName, subject, actionLine;
+  if(kind === 'house_for_vishnu'){
+    const loggedBy = entry.paidBy === 'azad' ? 'azad' : 'irshad';
+    const other = loggedBy === 'azad' ? 'irshad' : 'azad';
+    toEmail = other === 'irshad' ? IRSHAD_EMAIL : AZAD_EMAIL;
+    toName = personLabel(other);
+    fromName = personLabel(loggedBy);
+    subject = `Vishnu's tab — new item (${fmt(entry.amount)})`;
+    actionLine = `Vishnu now owes ${personLabel(loggedBy)} an extra ${fmt(entry.amount)}.`;
+  } else if(kind === 'vishnu_personal_for'){
+    const target = entry.target === 'azad' ? 'azad' : 'irshad';
+    const other = target === 'azad' ? 'irshad' : 'azad';
+    toEmail = other === 'irshad' ? IRSHAD_EMAIL : AZAD_EMAIL;
+    toName = personLabel(other);
+    fromName = 'Vishnu';
+    subject = `Vishnu's tab — payment logged (${fmt(entry.amount)})`;
+    actionLine = `Vishnu paid ${fmt(entry.amount)} for ${personLabel(target)}'s personal item — reduces what Vishnu owes.`;
+  } else {
+    return;
+  }
+
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
+
+  const params = {
+    to_email: toEmail,
+    to_name: toName,
+    from_name: fromName,
+    subject,
+    paid_by: fromName,
+    entry_date: fmtDate(new Date(entry.date)),
+    entry_time: '',
+    amount: fmt(entry.amount),
+    category: "Vishnu's Tab",
+    description: entry.description || '(no description)',
+    split_summary: '',
+    cycle_total: '',
+    per_person_share: '',
+    irshad_spent: fmt(owedToIrshad),
+    azad_spent: fmt(owedToAzad),
+    balance_summary: `${actionLine} Net balance due from Vishnu: ${fmt(netVishnuOwes)}.`
+  };
+
+  try{
+    await emailjs.send(cfg.serviceId, cfg.templateId, params);
+  }catch(e){
+    console.error('EmailJS send failed', e);
+    showToast('Entry saved, but the notification email failed to send.');
+  }
+}
+
+/* ---------------- Vishnu entry -> notepad-style image -> WhatsApp share ---------------- */
+async function ensureFontsLoaded(){
+  if(!document.fonts || !document.fonts.load) return;
+  try{
+    await Promise.all([
+      document.fonts.load("600 30px 'Fraunces'"),
+      document.fonts.load("700 32px 'IBM Plex Mono'"),
+      document.fonts.load("600 16px 'IBM Plex Mono'"),
+      document.fonts.load("400 15px 'Inter'"),
+      document.fonts.load("600 13px 'Inter'"),
+      document.fonts.ready
+    ]);
+  }catch(e){ /* fonts best-effort — canvas will fall back to system fonts */ }
+}
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight){
+  const words = (text||'').split(' ');
+  let line = '', lines = 0;
+  for(let i=0;i<words.length;i++){
+    const test = line ? line + ' ' + words[i] : words[i];
+    if(ctx.measureText(test).width > maxWidth && line){
+      ctx.fillText(line, x, y + lines*lineHeight);
+      line = words[i];
+      lines++;
+    } else {
+      line = test;
+    }
+  }
+  ctx.fillText(line, x, y + lines*lineHeight);
+  return lines + 1; // number of lines drawn
+}
+
+async function buildVishnuEntryImage(data){
+  // data: {who, amount, amountColor, date, description, badge}
+  await ensureFontsLoaded();
+  const W = 680, H = 440, DPR = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  // paper background
+  ctx.fillStyle = '#EFEBDF';
+  ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = '#DAD3BE';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(8,8,W-16,H-16);
+
+  // notepad ruled lines
+  ctx.strokeStyle = 'rgba(180,132,42,0.18)';
+  ctx.lineWidth = 1;
+  for(let y=118; y<H-40; y+=32){
+    ctx.beginPath(); ctx.moveTo(30,y); ctx.lineTo(W-30,y); ctx.stroke();
+  }
+  // red margin rule
+  ctx.strokeStyle = 'rgba(156,58,50,0.32)';
+  ctx.beginPath(); ctx.moveTo(66,50); ctx.lineTo(66,H-34); ctx.stroke();
+
+  // header
+  ctx.fillStyle = '#141F27';
+  ctx.font = "600 25px 'Fraunces', serif";
+  ctx.fillText('Mess Ledger', 32, 44);
+  ctx.fillStyle = '#4B5A63';
+  ctx.font = "600 11px 'Inter', sans-serif";
+  ctx.fillText("VISHNU'S TAB · ENTRY", 32, 64);
+
+  let y = 108;
+  const left = 88;
+
+  ctx.fillStyle = '#8A5A2C';
+  ctx.font = "600 12px 'Inter', sans-serif";
+  ctx.fillText((data.who||'').toUpperCase(), left, y);
+
+  y += 42;
+  ctx.fillStyle = data.amountColor || '#141F27';
+  ctx.font = "700 34px 'IBM Plex Mono', monospace";
+  ctx.fillText('BHD ' + data.amount, left, y);
+
+  y += 40;
+  ctx.fillStyle = '#141F27';
+  ctx.font = "400 15px 'Inter', sans-serif";
+  const linesDrawn = wrapCanvasText(ctx, data.description || '(no description)', left, y, W-left-40, 22);
+  y += linesDrawn*22 + 10;
+
+  if(data.badge){
+    ctx.fillStyle = '#8A5A2C';
+    ctx.font = "600 11px 'Inter', sans-serif";
+    ctx.fillText(data.badge, left, y);
+    y += 20;
+  }
+
+  // date footer
+  ctx.fillStyle = '#4B5A63';
+  ctx.font = "400 12px 'IBM Plex Mono', monospace";
+  ctx.fillText(data.date || '', left, H-52);
+
+  // brass "stamp"
+  ctx.save();
+  ctx.translate(W-150, H-56);
+  ctx.rotate(-3*Math.PI/180);
+  ctx.strokeStyle = '#1F6F54';
+  ctx.lineWidth = 2;
+  ctx.font = "600 12px 'Fraunces', serif";
+  const stampText = 'IRSHAD & AZAD';
+  const tw = ctx.measureText(stampText).width;
+  roundRectPath(ctx, -14, -18, tw+28, 30, 15);
+  ctx.stroke();
+  ctx.fillStyle = '#1F6F54';
+  ctx.fillText(stampText, 0, 2);
+  ctx.restore();
+
+  return new Promise(resolve=> canvas.toBlob(blob=> resolve(blob), 'image/png'));
+}
+
+function roundRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+async function shareVishnuEntryToWhatsApp(data){
+  showToast('Preparing image…');
+  let blob;
+  try{
+    blob = await buildVishnuEntryImage(data);
+  }catch(e){
+    console.error('Image build failed', e);
+    showToast('Could not build the image.');
+    return;
+  }
+  if(!blob){ showToast('Could not build the image.'); return; }
+
+  const file = new File([blob], `vishnu-entry-${Date.now()}.png`, {type:'image/png'});
+  const shareText = `Vishnu's Tab — ${data.who}: BHD ${data.amount} · ${data.description || ''}`;
+
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:'Vishnu Tab Entry', text: shareText});
+      return;
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // user cancelled — do nothing
+      // fall through to fallback below
+    }
+  }
+
+  // Fallback: download the image, then open WhatsApp with the text pre-filled
+  // (browsers can't attach images to a wa.me link — user attaches the saved image).
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Image saved to your device — attach it in WhatsApp.');
+  window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+}
+
+const WA_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.46 1.32 4.96L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 1.8a8.09 8.09 0 0 1 5.75 2.38 8.07 8.07 0 0 1 2.38 5.73c0 4.48-3.65 8.13-8.14 8.13a8.1 8.1 0 0 1-4.13-1.13l-.3-.17-3.11.82.83-3.03-.19-.31a8.08 8.08 0 0 1-1.25-4.33c0-4.48 3.65-8.13 8.16-8.13m-4.48 4.19c-.15 0-.4.06-.61.29-.21.24-.8.78-.8 1.9s.82 2.2.93 2.36c.11.15 1.6 2.5 3.97 3.44 1.96.79 2.36.63 2.78.6.42-.04 1.36-.55 1.55-1.09.19-.53.19-.98.13-1.08-.06-.1-.21-.16-.44-.28-.23-.11-1.36-.67-1.57-.75-.21-.08-.36-.11-.51.11-.15.23-.59.75-.72.9-.13.15-.26.17-.49.06-.23-.11-.96-.36-1.83-1.14-.68-.6-1.14-1.35-1.27-1.58-.13-.23-.01-.35.1-.47.11-.11.23-.27.35-.41.11-.13.15-.23.23-.38.08-.15.04-.29-.02-.4-.06-.11-.51-1.28-.72-1.74-.19-.45-.38-.39-.51-.4-.13-.01-.28-.01-.43-.01"/></svg>`;
 
 function initFirebase(){
   const cfg = getSavedConfig();
@@ -907,7 +1162,6 @@ function renderDashboard(){
   document.getElementById('wVishnuCount').textContent = vishnuInvolved ? `${vCount} entries · not counted above` : 'Not involved this cycle';
 
   renderExpenseTable();
-  renderSplitWidget();
 }
 
 function renderExpenseTable(){
@@ -926,13 +1180,19 @@ function renderExpenseTable(){
       ? `<span class="tag-badge split" title="${participants.map(p=>personLabel(p)+' '+fmt(splitAmounts[p])).join(' · ')}">${participants.map(personLabel).join(' + ')}${isCustomSplit ? ' (custom)' : ''}</span>`
       : '';
     return `
-    <tr>
-      <td class="mono" style="color:var(--ink-soft);white-space:nowrap;">${fmtDate(new Date(e.date))}<br><span style="font-size:11px;">${fmtTime(e.time)}</span></td>
-      <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
-      <td>${escapeHtml(cleanDesc)} ${badge}${splitBadge} <span style="color:var(--ink-soft);font-size:11.5px;">· ${escapeHtml(e.category||'')}</span></td>
-      <td class="num">${fmt(e.amount)}</td>
-      <td><button class="btn-danger-text" onclick="deleteExpense('${e.id}')">Remove</button></td>
-    </tr>`;
+    <div class="entry-row tappable" onclick="showExpenseDetail('${e.id}')">
+      <div class="entry-row-top">
+        <div class="entry-row-who">
+          <span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span>
+        </div>
+        <span class="entry-amount">${fmt(e.amount)}</span>
+      </div>
+      <div class="entry-row-desc">${escapeHtml(cleanDesc)} ${badge}${splitBadge} <span class="cat">· ${escapeHtml(e.category||'')}</span></div>
+      <div class="entry-row-meta">
+        <span class="entry-date">${fmtDate(new Date(e.date))} · ${fmtTime(e.time)}</span>
+        <button class="btn-danger-text" onclick="event.stopPropagation();deleteExpense('${e.id}')">Remove</button>
+      </div>
+    </div>`;
   }).join('');
 
   const total = computeMessTotal(liveExpenses);
@@ -941,44 +1201,36 @@ function renderExpenseTable(){
     ? `Cycle Total <span style="font-weight:500;font-size:11px;color:var(--ink-soft);">(excl. Vishnu's ${fmt(vishnuShareTotal)})</span>`
     : 'Cycle Total';
 
-  wrap.innerHTML = `<table>
-    <thead><tr><th>Date &amp; Time</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
-    <tbody>${rows}
-      <tr class="total-row"><td colspan="3">${totalLabel}</td><td class="num">${fmt(total)}</td><td></td></tr>
-    </tbody></table>`;
+  wrap.innerHTML = `<div class="entry-list">${rows}
+    <div class="entry-total-row"><span>${totalLabel}</span><span class="entry-amount">${fmt(total)}</span></div>
+  </div>`;
 }
 
-/* ---------------- Spend Split widget ---------------- */
-function renderSplitWidget(){
-  const {spent} = computeNetBalances(liveExpenses);
-  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
-  const people = vishnuInvolved ? ['irshad','azad','vishnu'] : ['irshad','azad'];
-  const grand = people.reduce((s,p)=> s + (spent[p]||0), 0);
+function showExpenseDetail(id){
+  const e = liveExpenses.find(x=> x.id === id);
+  if(!e) return;
+  const isMarkedByVishnu = e.description && e.description.includes('[Marked by Vishnu]');
+  const cleanDesc = isMarkedByVishnu ? e.description.replace('[Marked by Vishnu]', '').trim() : (e.description || '(no description)');
+  const {participants, splitAmounts, payer} = expenseSplitInfo(e);
+  const splitRowsHtml = participants.map(p=> `
+    <div class="detail-row">
+      <span class="detail-label">${p===payer ? personLabel(p)+' (paid)' : personLabel(p)}</span>
+      <span class="detail-value mono">${fmt(splitAmounts[p])}</span>
+    </div>`).join('');
 
-  document.getElementById('splitWidgetTotal').textContent = fmt(grand);
-
-  const bar = document.getElementById('splitWidgetBar');
-  const legend = document.getElementById('splitWidgetLegend');
-
-  if(grand <= 0.0005){
-    bar.innerHTML = '';
-    legend.innerHTML = `<span style="font-size:12.5px;color:var(--ink-soft);">No spend logged yet this cycle.</span>`;
-    return;
-  }
-
-  bar.innerHTML = people.map(p=>{
-    const pct = ((spent[p]||0) / grand) * 100;
-    if(pct <= 0) return '';
-    return `<div style="width:${pct}%;background:var(--${p});" title="${personLabel(p)} ${pct.toFixed(1)}%"></div>`;
-  }).join('');
-
-  legend.innerHTML = people.map(p=>{
-    const pct = ((spent[p]||0) / grand) * 100;
-    return `<div>
-      <span class="who-chip ${p}"><span class="dot"></span>${personLabel(p)}</span>
-      <div class="mono" style="font-size:15px;font-weight:600;margin-top:3px;">${fmt(spent[p]||0)} <span style="font-size:12px;font-weight:500;color:var(--ink-soft);">(${pct.toFixed(1)}%)</span></div>
-    </div>`;
-  }).join('');
+  document.getElementById('entryDetailModalBody').innerHTML = `
+    <div class="detail-amount-hero">
+      <div class="amt">${fmt(e.amount)}</div>
+      <div class="lbl">Paid by ${personLabel(e.person)}</div>
+    </div>
+    <div class="detail-row"><span class="detail-label">Description</span><span class="detail-value">${escapeHtml(cleanDesc)}</span></div>
+    <div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">${escapeHtml(e.category||'—')}</span></div>
+    <div class="detail-row"><span class="detail-label">Date</span><span class="detail-value mono">${fmtDate(new Date(e.date))}</span></div>
+    <div class="detail-row"><span class="detail-label">Time</span><span class="detail-value mono">${fmtTime(e.time)}</span></div>
+    ${isMarkedByVishnu ? `<div class="detail-row"><span class="detail-label">Note</span><span class="detail-value">Marked by Vishnu</span></div>` : ''}
+    <div style="margin-top:14px;"><label style="margin-bottom:8px;">Split Breakdown</label>${splitRowsHtml}</div>
+  `;
+  openModal('entryDetailModal');
 }
 
 function setPayer(p){
@@ -1240,13 +1492,19 @@ function renderVishnu(){
     const share = Number(splitAmounts.vishnu) || 0;
     const cleanDesc = (e.description||'').replace('[Marked by Vishnu]','').trim();
     return `
-    <tr>
-      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${payer}"><span class="dot"></span>Vishnu owes ${personLabel(payer)}</span></td>
-      <td>${escapeHtml(cleanDesc)} <span style="font-size:11px;background:var(--vishnu-tint);padding:2px 6px;border-radius:4px;color:var(--vishnu);font-weight:600;margin-left:6px;">Split share</span></td>
-      <td class="num">${fmt(share)}</td>
-      <td></td>
-    </tr>`;
+    <div class="entry-row">
+      <div class="entry-row-top">
+        <div class="entry-row-who"><span class="who-chip ${payer}"><span class="dot"></span>Vishnu owes ${personLabel(payer)}</span></div>
+        <span class="entry-amount">${fmt(share)}</span>
+      </div>
+      <div class="entry-row-desc">${escapeHtml(cleanDesc)} <span class="tag-badge">Split share</span></div>
+      <div class="entry-row-meta">
+        <span class="entry-date">${fmtDate(new Date(e.date))}</span>
+        <div class="entry-row-actions">
+          <button class="share-wa-btn" onclick="shareVishnuSplitEntry('${e.id}')">${WA_ICON}Share</button>
+        </div>
+      </div>
+    </div>`;
   }).join('');
 
   let rows = liveVishnu.map(e=>{
@@ -1259,25 +1517,64 @@ function renderVishnu(){
       chipClass = e.target || 'vishnu'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
     } else {
       chipClass = e.assignTo || 'irshad'; chipLabel = `${e.assignTo==='azad'?'Azad':'Irshad'} credited`; effAmt = -amt;
-      tagHtml = `<span style="font-size:11px;background:var(--vishnu-tint);padding:2px 6px;border-radius:4px;color:var(--vishnu);font-weight:600;margin-left:6px;">By Vishnu</span>`;
+      tagHtml = `<span class="tag-badge">By Vishnu</span>`;
     }
     return `
-    <tr>
-      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span></td>
-      <td>${escapeHtml(e.description||'')} ${tagHtml}</td>
-      <td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td>
-      <td><button class="btn-danger-text" onclick="deleteVishnu('${e.id}')">Remove</button></td>
-    </tr>`;
+    <div class="entry-row">
+      <div class="entry-row-top">
+        <div class="entry-row-who"><span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span></div>
+        <span class="entry-amount" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</span>
+      </div>
+      <div class="entry-row-desc">${escapeHtml(e.description||'')} ${tagHtml}</div>
+      <div class="entry-row-meta">
+        <span class="entry-date">${fmtDate(new Date(e.date))}</span>
+        <div class="entry-row-actions">
+          <button class="share-wa-btn" onclick="shareVishnuTabEntry('${e.id}')">${WA_ICON}Share</button>
+          <button class="btn-danger-text" onclick="deleteVishnu('${e.id}')">Remove</button>
+        </div>
+      </div>
+    </div>`;
   }).join('');
 
-  wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="num">Amount / Effect</th><th></th></tr></thead>
-    <tbody>${splitRows}${rows}
-      <tr class="total-row"><td colspan="3">Vishnu owes Irshad</td><td class="num">${fmt(owedToIrshad)}</td><td></td></tr>
-      <tr class="total-row"><td colspan="3">Vishnu owes Azad</td><td class="num">${fmt(owedToAzad)}</td><td></td></tr>
-      <tr class="total-row"><td colspan="3">Net Balance Due from Vishnu</td><td class="num">${fmt(netVishnuOwes)}</td><td></td></tr>
-    </tbody></table>`;
+  wrap.innerHTML = `<div class="entry-list">${splitRows}${rows}
+    <div class="entry-total-row"><span>Vishnu owes Irshad</span><span class="entry-amount">${fmt(owedToIrshad)}</span></div>
+    <div class="entry-total-row"><span>Vishnu owes Azad</span><span class="entry-amount">${fmt(owedToAzad)}</span></div>
+    <div class="entry-total-row"><span>Net Balance Due from Vishnu</span><span class="entry-amount">${fmt(netVishnuOwes)}</span></div>
+  </div>`;
+}
+
+function shareVishnuSplitEntry(expenseId){
+  const e = liveExpenses.find(x=> x.id === expenseId);
+  if(!e) return;
+  const {splitAmounts, payer} = expenseSplitInfo(e);
+  const share = Number(splitAmounts.vishnu) || 0;
+  const cleanDesc = (e.description||'').replace('[Marked by Vishnu]','').trim();
+  shareVishnuEntryToWhatsApp({
+    who: `Vishnu owes ${personLabel(payer)}`,
+    amount: fmt(share),
+    date: fmtDate(new Date(e.date)),
+    description: cleanDesc,
+    badge: 'Split share of a mess expense'
+  });
+}
+
+function shareVishnuTabEntry(id){
+  const e = liveVishnu.find(x=> x.id === id);
+  if(!e) return;
+  const amt = Number(e.amount) || 0;
+  const kind = vishnuKindOf(e);
+  let who, effAmt, badge;
+  if(kind === 'house_for_vishnu'){
+    who = `Vishnu owes ${e.paidBy==='azad'?'Azad':'Irshad'}`; effAmt = amt; badge = 'Personal item on our bill';
+  } else if(kind === 'vishnu_personal_for'){
+    who = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = amt; badge = 'Reduces what Vishnu owes';
+  } else {
+    who = `${e.assignTo==='azad'?'Azad':'Irshad'} credited`; effAmt = amt; badge = 'By Vishnu — reduces balance';
+  }
+  shareVishnuEntryToWhatsApp({
+    who, amount: fmt(effAmt), date: fmtDate(new Date(e.date)),
+    description: e.description||'', badge
+  });
 }
 
 async function addVishnu(){
@@ -1298,20 +1595,26 @@ async function addVishnu(){
   });
 
   // Also add it as a regular expense spend for the chosen person in the main room ledger, affecting owes and split
-  await db.collection('expenses').add({
+  const syncedEntry = {
     person: assignTo,
     amount,
     date,
+    time: nowHHMM(),
     category: 'Other',
     description: markedDesc,
     cycleKey: CURRENT_CYCLE,
-    archived: false,
+    archived: false
+  };
+  await db.collection('expenses').add({
+    ...syncedEntry,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   document.getElementById('vAmount').value='';
   document.getElementById('vDesc').value='';
   showToast('Saved Vishnu Spend / Payment & synced to main ledger.');
+
+  notifyNewEntry(syncedEntry);
 }
 
 async function addHouseForVishnu(){
@@ -1324,17 +1627,22 @@ async function addHouseForVishnu(){
 
   // Vishnu's own personal item, tagged onto our mess bill — this only adds to what he owes.
   // It never touches the main expenses/mess total.
-  await db.collection('vishnuExpenses').add({
+  const houseEntry = {
     kind: 'house_for_vishnu',
     paidBy, amount, date,
     description: description || 'Personal item for Vishnu',
-    settled:false,
+    settled:false
+  };
+  await db.collection('vishnuExpenses').add({
+    ...houseEntry,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   document.getElementById('hAmount').value='';
   document.getElementById('hDesc').value='';
   showToast('Added — Vishnu owes this now.');
+
+  notifyVishnuTabEntry(houseEntry, 'house_for_vishnu');
 }
 
 async function deleteVishnu(id){
@@ -1401,9 +1709,14 @@ function renderHistoryCycles(){
       const badge = isMarkedByVishnu ? `<span class="tag-badge">Marked by Vishnu</span>` : '';
       const splitBadge = (e.splitWith && e.splitWith.includes('vishnu')) ? `<span class="tag-badge split">${e.splitWith.map(personLabel).join(' + ')}</span>` : '';
       return `
-      <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
-      <td>${escapeHtml(cleanDesc)} ${badge}${splitBadge}</td><td class="num">${fmt(e.amount)}</td></tr>`;
+      <div class="entry-row">
+        <div class="entry-row-top">
+          <div class="entry-row-who"><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></div>
+          <span class="entry-amount">${fmt(e.amount)}</span>
+        </div>
+        <div class="entry-row-desc">${escapeHtml(cleanDesc)} ${badge}${splitBadge}</div>
+        <div class="entry-row-meta"><span class="entry-date">${fmtDate(new Date(e.date))}</span></div>
+      </div>`;
     }).join('');
     return `<div class="hist-item" id="hc-${c.id}">
       <div class="hist-head" onclick="toggleHist('hc-${c.id}')">
@@ -1416,7 +1729,7 @@ function renderHistoryCycles(){
           <div><label>Azad Spent</label><div class="mono" style="font-weight:600;">${fmt(c.azadTotal)}</div></div>
           ${hasVishnu ? `<div><label>Vishnu Spent</label><div class="mono" style="font-weight:600;">${fmt(c.vishnuTotal)}</div></div>` : ''}
         </div>
-        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="entry-list" style="border:1px solid var(--rule);border-radius:8px;margin-top:14px;overflow:hidden;">${rows}</div>
         <div class="settlement-line">${settleTxt}</div>
       </div>
     </div>`;
@@ -1439,9 +1752,14 @@ function renderHistoryVishnu(){
       else if(kind === 'vishnu_personal_for'){ chipClass = e.target || 'vishnu'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt; }
       else { chipClass = e.assignTo || 'irshad'; chipLabel = `${e.assignTo==='azad'?'Azad':'Irshad'} credited`; effAmt = -amt; }
       return `
-      <tr><td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
-      <td><span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span></td>
-      <td>${escapeHtml(e.description||'')}</td><td class="num" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</td></tr>`;
+      <div class="entry-row">
+        <div class="entry-row-top">
+          <div class="entry-row-who"><span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span></div>
+          <span class="entry-amount" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</span>
+        </div>
+        <div class="entry-row-desc">${escapeHtml(e.description||'')}</div>
+        <div class="entry-row-meta"><span class="entry-date">${fmtDate(new Date(e.date))}</span></div>
+      </div>`;
     }).join('');
     return `<div class="hist-item" id="hv-${c.id}">
       <div class="hist-head" onclick="toggleHist('hv-${c.id}')">
@@ -1453,7 +1771,7 @@ function renderHistoryVishnu(){
           <div><label>Vishnu Owed Irshad</label><div class="mono" style="font-weight:600;">${fmt(c.owedToIrshad!==undefined ? c.owedToIrshad : c.paidByIrshad)}</div></div>
           <div><label>Vishnu Owed Azad</label><div class="mono" style="font-weight:600;">${fmt(c.owedToAzad!==undefined ? c.owedToAzad : c.paidByAzad)}</div></div>
         </div>
-        <table style="margin-top:14px;"><thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount / Effect</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="entry-list" style="border:1px solid var(--rule);border-radius:8px;margin-top:14px;overflow:hidden;">${rows}</div>
       </div>
     </div>`;
   }).join('');

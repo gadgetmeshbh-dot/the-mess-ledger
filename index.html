@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 /* ============ TOKENS ============ */
 :root{
@@ -291,6 +292,14 @@ tr:last-child td{border-bottom:none;}
         <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
       </div>
 
+      <div class="card" id="splitWidgetCard">
+        <div class="card-head"><h3>Spend Split — Share of Total</h3><span class="mono" style="font-size:12px;color:var(--ink-soft);" id="splitWidgetTotal">BHD 0.000</span></div>
+        <div class="card-body">
+          <div id="splitWidgetBar" style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--rule);margin-bottom:16px;"></div>
+          <div id="splitWidgetLegend" style="display:flex;gap:26px;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head"><h3>Add an Expense</h3></div>
         <div class="card-body">
@@ -311,9 +320,10 @@ tr:last-child td{border-bottom:none;}
             <label class="split-check"><input type="checkbox" id="splitVishnu" onchange="onParticipantsChange()"> Vishnu</label>
           </div>
 
-          <div class="form-row three">
+          <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr;">
             <div><label>Amount (BHD)</label><input type="number" step="0.001" min="0" id="expAmount" placeholder="0.000" oninput="onAmountChange()"></div>
             <div><label>Date</label><input type="date" id="expDate"></div>
+            <div><label>Time</label><input type="time" id="expTime"></div>
             <div><label>Category</label>
               <select id="expCategory">
                 <option>Groceries</option><option>Vegetables</option><option>Gas / LPG</option>
@@ -532,6 +542,16 @@ tr:last-child td{border-bottom:none;}
         <div><label>Messaging Sender ID</label><input type="text" id="cfgSenderId"></div>
         <div><label>App ID</label><input type="text" id="cfgAppId"></div>
       </div>
+      <div style="border-top:1px solid var(--rule);margin:18px 0 14px;padding-top:14px;">
+        <label style="margin-bottom:2px;">Auto-email on new entry (EmailJS)</label>
+        <p style="font-size:11.5px;color:var(--ink-soft);margin:0 0 12px;">Whoever didn't pay gets notified automatically. Uses the messlesdger@gmail.com sending account via EmailJS — see README for the one-time setup.</p>
+        <div class="form-row" style="grid-template-columns:1fr;">
+          <div><label>EmailJS Public Key</label><input type="text" id="cfgEjsPublicKey" placeholder="e.g. Ab1Cd2Ef3Gh4Ij5Kl"></div>
+          <div><label>EmailJS Service ID</label><input type="text" id="cfgEjsServiceId" placeholder="e.g. service_messledger"></div>
+          <div><label>EmailJS Template ID</label><input type="text" id="cfgEjsTemplateId" placeholder="e.g. template_new_entry"></div>
+        </div>
+        <label class="split-check" style="margin-top:4px;"><input type="checkbox" id="cfgEjsEnabled"> Send emails automatically on new entries</label>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal('settingsModal')">Cancel</button>
@@ -580,6 +600,17 @@ function fmtDate(d){
   return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowHHMM(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function fmtTime(t){
+  if(!t) return '';
+  const [h,m] = t.split(':').map(Number);
+  const ap = h>=12 ? 'PM':'AM';
+  const h12 = ((h+11)%12)+1;
+  return `${h12}:${String(m).padStart(2,'0')} ${ap}`;
+}
+// Sortable key combining date + time so "recent" always means most recently
+// dated/timed entry, newest first — falls back to midnight if time missing.
+function entrySortKey(e){ return `${e.date||''}T${e.time||'00:00'}`; }
 
 let CURRENT_CYCLE = cycleKeyFor();
 
@@ -588,6 +619,86 @@ function getSavedConfig(){
   try{ return JSON.parse(localStorage.getItem('ledger_fb_config')||'null'); }catch(e){ return null; }
 }
 function saveConfig(cfg){ localStorage.setItem('ledger_fb_config', JSON.stringify(cfg)); }
+
+/* ---------------- EmailJS config persistence + auto-notify ---------------- */
+const IRSHAD_EMAIL = 'irshadhimzan.bh@gmail.com';
+const AZAD_EMAIL = 'azadjayaprakash406@gmail.com';
+
+// Baked-in defaults from the one-time EmailJS setup, so any device opening
+// this file works out of the box — Settings can still override these.
+const EMAIL_CONFIG_DEFAULT = {
+  publicKey: 'SdCKJpUmEmPZfGJv8',
+  serviceId: 'service_a7d1d4j',
+  templateId: 'template_n8x9ruf',
+  enabled: true
+};
+
+function getEmailConfig(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('ledger_email_config')||'null');
+    return saved || EMAIL_CONFIG_DEFAULT;
+  }catch(e){ return EMAIL_CONFIG_DEFAULT; }
+}
+function saveEmailConfig(cfg){ localStorage.setItem('ledger_email_config', JSON.stringify(cfg)); }
+
+function initEmailJS(){
+  const cfg = getEmailConfig();
+  if(cfg && cfg.enabled && cfg.publicKey && window.emailjs){
+    try{ emailjs.init({publicKey: cfg.publicKey}); }catch(e){ console.error('EmailJS init failed', e); }
+  }
+}
+
+// Fires after a new expense is saved. Notifies whichever of Irshad/Azad
+// did NOT pay, with the entry details and a snapshot of the cycle so far.
+// Vishnu-paid entries aren't auto-mailed (no recipient rule defined for them).
+async function notifyNewEntry(entry){
+  const cfg = getEmailConfig();
+  if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
+  if(!window.emailjs){ return; }
+
+  let toEmail, toName, fromName;
+  if(entry.person === 'azad'){ toEmail = IRSHAD_EMAIL; toName = 'Irshad'; fromName = 'Azad'; }
+  else if(entry.person === 'irshad'){ toEmail = AZAD_EMAIL; toName = 'Azad'; fromName = 'Irshad'; }
+  else { return; } // paid by Vishnu — no auto-notify target
+
+  // Build a "cycle so far" snapshot including this brand-new entry, since the
+  // live Firestore listener may not have refreshed liveExpenses yet.
+  const listWithNew = [...liveExpenses, entry];
+  const {messSpent, shareOwed} = computeNetBalances(listWithNew);
+  const total = computeMessTotal(listWithNew);
+  const irshadDiff = messSpent.irshad - (shareOwed.irshad||0);
+  const balanceLine = Math.abs(irshadDiff) < 0.0005
+    ? 'Settled — everyone has paid their share.'
+    : irshadDiff > 0
+      ? `Azad owes Irshad ${fmt(irshadDiff)}`
+      : `Irshad owes Azad ${fmt(-irshadDiff)}`;
+
+  const {participants, splitAmounts} = expenseSplitInfo(entry);
+  const splitSummary = participants.map(p=> `${personLabel(p)}: ${fmt(splitAmounts[p])}`).join(', ');
+
+  const params = {
+    to_email: toEmail,
+    to_name: toName,
+    paid_by: personLabel(entry.person),
+    entry_date: fmtDate(new Date(entry.date)),
+    entry_time: fmtTime(entry.time),
+    amount: fmt(entry.amount),
+    category: entry.category || '',
+    description: entry.description || '(no description)',
+    split_summary: splitSummary,
+    cycle_total: fmt(total),
+    irshad_spent: fmt(messSpent.irshad),
+    azad_spent: fmt(messSpent.azad),
+    balance_summary: balanceLine
+  };
+
+  try{
+    await emailjs.send(cfg.serviceId, cfg.templateId, params);
+  }catch(e){
+    console.error('EmailJS send failed', e);
+    showToast('Entry saved, but the notification email failed to send.');
+  }
+}
 
 function initFirebase(){
   const cfg = getSavedConfig();
@@ -619,7 +730,7 @@ function attachListeners(){
     .onSnapshot(snap=>{
       liveExpenses = [];
       snap.forEach(doc=> liveExpenses.push({id:doc.id, ...doc.data()}));
-      liveExpenses.sort((a,b)=> (a.date < b.date ? 1 : -1));
+      liveExpenses.sort((a,b)=> entrySortKey(b).localeCompare(entrySortKey(a)));
       renderDashboard();
     }, err=>{ console.error(err); showToast('Sync error — check Firestore rules.'); });
 
@@ -769,6 +880,7 @@ function renderDashboard(){
   }
 
   renderExpenseTable();
+  renderSplitWidget();
 }
 
 function renderExpenseTable(){
@@ -788,7 +900,7 @@ function renderExpenseTable(){
       : '';
     return `
     <tr>
-      <td class="mono" style="color:var(--ink-soft);">${fmtDate(new Date(e.date))}</td>
+      <td class="mono" style="color:var(--ink-soft);white-space:nowrap;">${fmtDate(new Date(e.date))}<br><span style="font-size:11px;">${fmtTime(e.time)}</span></td>
       <td><span class="who-chip ${e.person}"><span class="dot"></span>${personLabel(e.person)}</span></td>
       <td>${escapeHtml(cleanDesc)} ${badge}${splitBadge} <span style="color:var(--ink-soft);font-size:11.5px;">· ${escapeHtml(e.category||'')}</span></td>
       <td class="num">${fmt(e.amount)}</td>
@@ -803,10 +915,43 @@ function renderExpenseTable(){
     : 'Cycle Total';
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
+    <thead><tr><th>Date &amp; Time</th><th>Paid by</th><th>Description</th><th class="num">Amount</th><th></th></tr></thead>
     <tbody>${rows}
       <tr class="total-row"><td colspan="3">${totalLabel}</td><td class="num">${fmt(total)}</td><td></td></tr>
     </tbody></table>`;
+}
+
+/* ---------------- Spend Split widget ---------------- */
+function renderSplitWidget(){
+  const {spent} = computeNetBalances(liveExpenses);
+  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
+  const people = vishnuInvolved ? ['irshad','azad','vishnu'] : ['irshad','azad'];
+  const grand = people.reduce((s,p)=> s + (spent[p]||0), 0);
+
+  document.getElementById('splitWidgetTotal').textContent = fmt(grand);
+
+  const bar = document.getElementById('splitWidgetBar');
+  const legend = document.getElementById('splitWidgetLegend');
+
+  if(grand <= 0.0005){
+    bar.innerHTML = '';
+    legend.innerHTML = `<span style="font-size:12.5px;color:var(--ink-soft);">No spend logged yet this cycle.</span>`;
+    return;
+  }
+
+  bar.innerHTML = people.map(p=>{
+    const pct = ((spent[p]||0) / grand) * 100;
+    if(pct <= 0) return '';
+    return `<div style="width:${pct}%;background:var(--${p});" title="${personLabel(p)} ${pct.toFixed(1)}%"></div>`;
+  }).join('');
+
+  legend.innerHTML = people.map(p=>{
+    const pct = ((spent[p]||0) / grand) * 100;
+    return `<div>
+      <span class="who-chip ${p}"><span class="dot"></span>${personLabel(p)}</span>
+      <div class="mono" style="font-size:15px;font-weight:600;margin-top:3px;">${fmt(spent[p]||0)} <span style="font-size:12px;font-weight:500;color:var(--ink-soft);">(${pct.toFixed(1)}%)</span></div>
+    </div>`;
+  }).join('');
 }
 
 function setPayer(p){
@@ -912,6 +1057,7 @@ async function addExpense(){
   if(!db) return showToast('Connect Firebase first — open settings.');
   const amount = parseFloat(document.getElementById('expAmount').value);
   const date = document.getElementById('expDate').value || todayISO();
+  const time = document.getElementById('expTime').value || nowHHMM();
   const category = document.getElementById('expCategory').value;
   const description = document.getElementById('expDesc').value.trim();
   if(!amount || amount<=0) return showToast('Enter a valid amount.');
@@ -925,18 +1071,25 @@ async function addExpense(){
   const sumCheck = participants.reduce((s,p)=>s+splitAmounts[p],0);
   if(Math.abs(sumCheck - amount) > 0.005) return showToast('Split amounts don\'t add up to the total — adjust before saving.');
 
-  await db.collection('expenses').add({
-    person: currentPayer, amount, date, category, description,
+  const newEntry = {
+    person: currentPayer, amount, date, time, category, description,
     splitWith: participants, splitAmounts,
-    cycleKey: CURRENT_CYCLE, archived:false,
+    cycleKey: CURRENT_CYCLE, archived:false
+  };
+
+  await db.collection('expenses').add({
+    ...newEntry,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
   document.getElementById('expAmount').value='';
   document.getElementById('expDesc').value='';
+  document.getElementById('expTime').value = nowHHMM();
   document.getElementById('splitVishnu').checked = false;
   splitEditorOpen = false;
   onParticipantsChange();
   showToast('Expense added.');
+
+  notifyNewEntry(newEntry);
 }
 
 async function deleteExpense(id){
@@ -1492,6 +1645,11 @@ document.getElementById('settingsBtn').addEventListener('click', ()=>{
   document.getElementById('cfgStorageBucket').value = cfg.storageBucket||'';
   document.getElementById('cfgSenderId').value = cfg.messagingSenderId||'';
   document.getElementById('cfgAppId').value = cfg.appId||'';
+  const ejs = getEmailConfig() || {};
+  document.getElementById('cfgEjsPublicKey').value = ejs.publicKey||'';
+  document.getElementById('cfgEjsServiceId').value = ejs.serviceId||'';
+  document.getElementById('cfgEjsTemplateId').value = ejs.templateId||'';
+  document.getElementById('cfgEjsEnabled').checked = !!ejs.enabled;
   openModal('settingsModal');
 });
 document.getElementById('saveConfigBtn').addEventListener('click', ()=>{
@@ -1505,11 +1663,21 @@ document.getElementById('saveConfigBtn').addEventListener('click', ()=>{
   };
   if(!cfg.apiKey || !cfg.projectId){ showToast('Please fill in at least API Key and Project ID.'); return; }
   saveConfig(cfg);
+
+  const ejsCfg = {
+    publicKey: document.getElementById('cfgEjsPublicKey').value.trim(),
+    serviceId: document.getElementById('cfgEjsServiceId').value.trim(),
+    templateId: document.getElementById('cfgEjsTemplateId').value.trim(),
+    enabled: document.getElementById('cfgEjsEnabled').checked
+  };
+  saveEmailConfig(ejsCfg);
+
   closeModal('settingsModal');
   location.reload();
 });
 
 document.getElementById('expDate').value = todayISO();
+document.getElementById('expTime').value = nowHHMM();
 document.getElementById('vDate').value = todayISO();
 document.getElementById('hDate').value = todayISO();
 document.getElementById('stmtFrom').value = todayISO();
@@ -1517,6 +1685,7 @@ document.getElementById('stmtTo').value = todayISO();
 document.getElementById('stmtDay').value = todayISO();
 onParticipantsChange();
 initFirebase();
+initEmailJS();
 </script>
 </body>
 </html>

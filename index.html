@@ -39,12 +39,14 @@
   --shadow: 0 1px 2px rgba(20,31,39,0.06), 0 8px 24px -12px rgba(20,31,39,0.18);
 }
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
+html,body{margin:0;padding:0;overflow-x:hidden;}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
 body{
   font-family:'Inter',sans-serif;
   background:var(--paper);
   color:var(--ink);
   min-height:100vh;
+  width:100%;
   -webkit-font-smoothing:antialiased;
 }
 h1,h2,h3,.serif{font-family:'Fraunces',serif;}
@@ -92,8 +94,10 @@ button{font-family:inherit;cursor:pointer;}
 .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--emerald-dark);font-weight:600;margin-bottom:6px;}
 
 /* ============ WIDGETS ============ */
-.widgets{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
-.widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:18px 18px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+/* Fixed 2-column layout — 3 widgets left, 3 widgets right, in matched pairs per row */
+.widgets{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:28px;}
+.widget{background:var(--paper-raised);border:1px solid var(--rule);border-radius:var(--radius);padding:18px 18px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;min-width:0;}
+.widget.span2{grid-column:1 / -1;}
 .widget-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600;margin-bottom:10px;}
 .widget-value{font-family:'IBM Plex Mono',monospace;font-size:25px;font-weight:600;letter-spacing:-0.5px;}
 .widget-sub{font-size:12px;color:var(--ink-soft);margin-top:6px;}
@@ -198,14 +202,19 @@ tr:last-child td{border-bottom:none;}
 
 .chart-wrap{position:relative;height:320px;padding:18px;}
 .grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
-@media (max-width:980px){.grid-2{grid-template-columns:1fr;}.widgets{grid-template-columns:1fr 1fr;}}
+@media (max-width:980px){.grid-2{grid-template-columns:1fr;}}
 @media (max-width:760px){
   .sidebar{transform:translateX(-100%);}
   .sidebar.open{transform:translateX(0);}
   .menu-toggle{display:flex;}
   .main{margin-left:0;padding:80px 16px 60px;}
-  .widgets{grid-template-columns:1fr 1fr;}
   .form-row,.form-row.three{grid-template-columns:1fr;}
+  .widget{padding:14px 12px 12px;}
+  .widget-value{font-size:19px;}
+}
+@media (max-width:420px){
+  .widgets{grid-template-columns:1fr;}
+  .widget.span2{grid-column:auto;}
 }
 
 .info-note{background:var(--brass-tint);border:1px solid var(--brass);color:#6B4E17;border-radius:8px;padding:12px 14px;font-size:12.5px;margin-bottom:18px;line-height:1.5;}
@@ -231,6 +240,8 @@ tr:last-child td{border-bottom:none;}
 .conn-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;}
 .conn-dot.ok{background:#3EA574;}
 .conn-dot.bad{background:var(--rose);}
+.card-body{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+#expenseTableWrap,#histVishnuWrap,#histWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 </style>
 </head>
 <body>
@@ -285,11 +296,16 @@ tr:last-child td{border-bottom:none;}
       </div>
 
       <div class="widgets">
+        <!-- Left column -->
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Total Spent <span class="tag-badge split" id="wTotalNote" style="display:none;margin-left:4px;">excl. Vishnu</span></div><div class="widget-value mono" id="wTotal">BHD 0.000</div><div class="widget-sub" id="wDaysLeft">—</div></div>
+        <!-- Right column -->
+        <div class="widget"><div class="widget-bar" style="background:var(--brass);"></div><div class="widget-label">Per Person Share</div><div class="widget-value mono" id="wPerPerson">BHD 0.000</div><div class="widget-sub" id="wPerPersonSub">Total split 2 ways</div></div>
+
         <div class="widget"><div class="widget-bar irshad"></div><div class="widget-label">Irshad Spent</div><div class="widget-value mono" id="wIrshad">BHD 0.000</div><div class="widget-sub" id="wIrshadCount">0 entries</div></div>
-        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
         <div class="widget"><div class="widget-bar azad"></div><div class="widget-label">Azad Spent</div><div class="widget-value mono" id="wAzad">BHD 0.000</div><div class="widget-sub" id="wAzadCount">0 entries</div></div>
-        <div class="widget" id="wVishnuWidget" style="display:none;"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
+
+        <div class="widget balance settled" id="wBalanceCard"><div class="widget-label">Balance</div><div class="widget-value mono" id="wBalance">Settled</div><div class="widget-sub" id="wBalanceSub">Nothing owed yet</div></div>
+        <div class="widget" id="wVishnuWidget"><div class="widget-bar" style="background:var(--vishnu);"></div><div class="widget-label">Vishnu's Share <span style="font-weight:400;text-transform:none;letter-spacing:0;">(excluded)</span></div><div class="widget-value mono" id="wVishnu">BHD 0.000</div><div class="widget-sub" id="wVishnuCount">0 entries</div></div>
       </div>
 
       <div class="card" id="splitWidgetCard">
@@ -679,6 +695,8 @@ async function notifyNewEntry(entry){
   const params = {
     to_email: toEmail,
     to_name: toName,
+    from_name: fromName,
+    subject: `New mess entry — ${fromName} paid ${fmt(entry.amount)}`,
     paid_by: personLabel(entry.person),
     entry_date: fmtDate(new Date(entry.date)),
     entry_time: fmtTime(entry.time),
@@ -687,6 +705,7 @@ async function notifyNewEntry(entry){
     description: entry.description || '(no description)',
     split_summary: splitSummary,
     cycle_total: fmt(total),
+    per_person_share: fmt(total / 2),
     irshad_spent: fmt(messSpent.irshad),
     azad_spent: fmt(messSpent.azad),
     balance_summary: balanceLine
@@ -842,6 +861,7 @@ function renderDashboard(){
   const total = computeMessTotal(liveExpenses); // excludes Vishnu's share — this is what Irshad & Azad split
 
   document.getElementById('wTotal').textContent = fmt(total);
+  document.getElementById('wPerPerson').textContent = fmt(total / 2);
   document.getElementById('wIrshad').textContent = fmt(messSpent.irshad);
   document.getElementById('wAzad').textContent = fmt(messSpent.azad);
   document.getElementById('wIrshadCount').textContent = `${liveExpenses.filter(e=>e.person==='irshad').length} entries`;
@@ -871,13 +891,10 @@ function renderDashboard(){
   }
 
   const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
-  document.getElementById('wVishnuWidget').style.display = vishnuInvolved ? '' : 'none';
   document.getElementById('wTotalNote').style.display = vishnuShareTotal > 0.0005 ? '' : 'none';
-  if(vishnuInvolved){
-    document.getElementById('wVishnu').textContent = fmt(vishnuShareTotal);
-    const vCount = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu')).length;
-    document.getElementById('wVishnuCount').textContent = `${vCount} entries · not counted above`;
-  }
+  document.getElementById('wVishnu').textContent = fmt(vishnuShareTotal);
+  const vCount = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu')).length;
+  document.getElementById('wVishnuCount').textContent = vishnuInvolved ? `${vCount} entries · not counted above` : 'Not involved this cycle';
 
   renderExpenseTable();
   renderSplitWidget();

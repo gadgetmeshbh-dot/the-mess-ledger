@@ -779,6 +779,7 @@ function saveConfig(cfg){ localStorage.setItem('ledger_fb_config', JSON.stringif
 /* ---------------- EmailJS config persistence + auto-notify ---------------- */
 const IRSHAD_EMAIL = 'irshadhimzan.bh@gmail.com';
 const AZAD_EMAIL = 'azadjayaprakash406@gmail.com';
+const VISHNU_EMAIL = 'vishnumnair20@gmail.com';
 
 // Baked-in defaults from the one-time EmailJS setup, so any device opening
 // this file works out of the box — Settings can still override these.
@@ -807,7 +808,10 @@ function initEmailJS(){
 // Fires after a new expense is saved. Notifies whichever of Irshad/Azad
 // did NOT pay, with the entry details and a snapshot of the cycle so far.
 // Vishnu-paid entries aren't auto-mailed (no recipient rule defined for them).
-async function notifyNewEntry(entry){
+// If Vishnu is involved in the entry (split with him, or it's a synced
+// Vishnu-tab entry), he's CC'd on the notification too.
+async function notifyNewEntry(entry, opts){
+  opts = opts || {};
   const cfg = getEmailConfig();
   if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
   if(!window.emailjs){ return; }
@@ -816,6 +820,9 @@ async function notifyNewEntry(entry){
   if(entry.person === 'azad'){ toEmail = IRSHAD_EMAIL; toName = 'Irshad'; fromName = 'Azad'; }
   else if(entry.person === 'irshad'){ toEmail = AZAD_EMAIL; toName = 'Azad'; fromName = 'Irshad'; }
   else { return; } // paid by Vishnu — no auto-notify target
+
+  const vishnuInvolved = opts.vishnuCC || (entry.splitWith && entry.splitWith.includes('vishnu'));
+  if(vishnuInvolved){ toEmail = `${toEmail},${VISHNU_EMAIL}`; toName = `${toName} & Vishnu`; }
 
   // Build a "cycle so far" snapshot including this brand-new entry, since the
   // live Firestore listener may not have refreshed liveExpenses yet.
@@ -887,6 +894,10 @@ async function notifyVishnuTabEntry(entry, kind){
   } else {
     return;
   }
+
+  // Every entry on this tab is about Vishnu — always CC him.
+  toEmail = `${toEmail},${VISHNU_EMAIL}`;
+  toName = `${toName} & Vishnu`;
 
   const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
 
@@ -1586,6 +1597,7 @@ async function confirmSettle(){
   const {net, spent, messSpent} = computeNetBalances(liveExpenses);
   const total = computeMessTotal(liveExpenses);
   const vishnuShareTotal = computeVishnuShareTotal(liveExpenses);
+  const vishnuInvolved = liveExpenses.some(e=> expenseSplitInfo(e).participants.includes('vishnu') || e.person==='vishnu');
   const txns = simplifyDebts(net);
   const {start,end} = cycleRangeFor(CURRENT_CYCLE);
   const snapshotExpenses = liveExpenses.map(e=>{
@@ -1608,6 +1620,51 @@ async function confirmSettle(){
 
   closeModal('settleModal');
   showToast('Cycle settled and archived. Fresh cycle started 🎉');
+
+  notifySettlement({cycleKey: CURRENT_CYCLE, total, messSpent, txns, vishnuInvolved});
+}
+
+// Fires after the main cycle is settled — notifies BOTH Irshad and Azad
+// (unlike per-entry notifications, which only tell the person who didn't pay).
+// If Vishnu had shared expenses in the settled cycle, he's CC'd too.
+async function notifySettlement(data){
+  const cfg = getEmailConfig();
+  if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
+  if(!window.emailjs){ return; }
+
+  let toEmail = `${IRSHAD_EMAIL},${AZAD_EMAIL}`;
+  let toName = 'Irshad & Azad';
+  if(data.vishnuInvolved){ toEmail += `,${VISHNU_EMAIL}`; toName += ' & Vishnu'; }
+
+  const settleLine = data.txns.length
+    ? data.txns.map(t=> `${personLabel(t.from)} pays ${personLabel(t.to)} ${fmt(t.amount)}`).join('; ')
+    : 'Already settled — no balance owed.';
+
+  const params = {
+    to_email: toEmail,
+    to_name: toName,
+    from_name: 'Mess Ledger',
+    subject: `Cycle settled — total ${fmt(data.total)}`,
+    paid_by: '',
+    entry_date: fmtDate(new Date()),
+    entry_time: '',
+    amount: fmt(data.total),
+    category: 'Cycle Settlement',
+    description: `Cycle ${data.cycleKey} has been settled and archived. A fresh cycle has started.`,
+    split_summary: `Irshad: ${fmt(data.messSpent.irshad)}, Azad: ${fmt(data.messSpent.azad)}`,
+    cycle_total: fmt(data.total),
+    per_person_share: fmt(data.total/2),
+    irshad_spent: fmt(data.messSpent.irshad),
+    azad_spent: fmt(data.messSpent.azad),
+    balance_summary: settleLine
+  };
+
+  try{
+    await emailjs.send(cfg.serviceId, cfg.templateId, params);
+  }catch(e){
+    console.error('EmailJS send failed', e);
+    showToast('Cycle settled, but the notification email failed to send.');
+  }
 }
 
 /* ---------------- Vishnu ---------------- */
@@ -1794,7 +1851,7 @@ async function addVishnu(){
   document.getElementById('vDesc').value='';
   showToast('Saved Vishnu Spend / Payment & synced to main ledger.');
 
-  notifyNewEntry(syncedEntry);
+  notifyNewEntry(syncedEntry, {vishnuCC:true});
 }
 
 async function addHouseForVishnu(){
@@ -1950,6 +2007,42 @@ async function confirmVishnuSettle(){
   showToast(remaining > 0
     ? `${selectedItems.length} transaction${selectedItems.length===1?'':'s'} marked received. ${remaining} still outstanding.`
     : `All selected transactions marked received — tab cleared.`);
+
+  notifyVishnuSettlement({netTotal, owedToIrshad, owedToAzad, count: selectedItems.length});
+}
+
+// Fires after Vishnu's tab is settled — notifies Irshad, Azad, AND Vishnu,
+// since this settlement is directly about him.
+async function notifyVishnuSettlement(data){
+  const cfg = getEmailConfig();
+  if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
+  if(!window.emailjs){ return; }
+
+  const params = {
+    to_email: `${IRSHAD_EMAIL},${AZAD_EMAIL},${VISHNU_EMAIL}`,
+    to_name: 'Irshad, Azad & Vishnu',
+    from_name: 'Mess Ledger',
+    subject: `Vishnu's tab settled — ${fmt(data.netTotal)}`,
+    paid_by: '',
+    entry_date: fmtDate(new Date()),
+    entry_time: '',
+    amount: fmt(data.netTotal),
+    category: "Vishnu's Tab Settlement",
+    description: `${data.count} transaction${data.count===1?'':'s'} marked received on Vishnu's tab.`,
+    split_summary: '',
+    cycle_total: '',
+    per_person_share: '',
+    irshad_spent: fmt(data.owedToIrshad),
+    azad_spent: fmt(data.owedToAzad),
+    balance_summary: `Vishnu's balance settled — Irshad received ${fmt(data.owedToIrshad)}, Azad received ${fmt(data.owedToAzad)}.`
+  };
+
+  try{
+    await emailjs.send(cfg.serviceId, cfg.templateId, params);
+  }catch(e){
+    console.error('EmailJS send failed', e);
+    showToast('Settlement saved, but the notification email failed to send.');
+  }
 }
 
 /* ---------------- History ---------------- */
@@ -2444,6 +2537,12 @@ document.querySelectorAll('.nav-item').forEach(btn=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     document.getElementById('sidebar').classList.remove('open');
+    // Charts are drawn while the Reports tab may still be hidden (display:none),
+    // so Chart.js can capture a 0x0 canvas size. Re-render once the tab is
+    // actually visible so it picks up the real container dimensions.
+    if(btn.dataset.view === 'reports'){
+      requestAnimationFrame(renderCharts);
+    }
   });
 });
 document.getElementById('menuToggle').addEventListener('click', ()=> document.getElementById('sidebar').classList.toggle('open'));

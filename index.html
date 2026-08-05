@@ -1627,7 +1627,7 @@ function vishnuTotals(){
 
   liveExpenses.forEach(e=>{
     const {participants, splitAmounts, payer} = expenseSplitInfo(e);
-    if(!participants.includes('vishnu')) return;
+    if(!participants.includes('vishnu') || e.vishnuShareSettled) return;
     const share = Number(splitAmounts.vishnu) || 0;
     if(payer==='azad') owedToAzad += share; else owedToIrshad += share; // defaults to irshad
   });
@@ -1655,7 +1655,7 @@ function renderVishnu(){
   document.getElementById('vIrshad').textContent = fmt(owedToIrshad);
   document.getElementById('vAzad').textContent = fmt(owedToAzad);
 
-  const splitEntries = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu'));
+  const splitEntries = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu') && !e.vishnuShareSettled);
   const totalEntries = liveVishnu.length + splitEntries.length;
   document.getElementById('vCount').textContent = `${totalEntries} entries`;
   document.getElementById('vEntryCount').textContent = `${totalEntries} entries`;
@@ -1832,33 +1832,52 @@ async function deleteVishnu(id){
   });
 }
 
-function openVishnuSettleModal(){
-  if(liveVishnu.length===0){ showToast('Nothing to settle yet.'); return; }
-  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
-
-  const rows = liveVishnu.map(e=>{
+// Builds one unified, checkable list for the Settle-with-Vishnu modal —
+// combining his dedicated tab entries AND his share of shared mess expenses
+// (split-with-Vishnu entries logged from the main dashboard). Every kind of
+// transaction Vishnu could owe or be owed for shows up here.
+function getVishnuSettleItems(){
+  const tabItems = liveVishnu.map(e=>{
     const amt = Number(e.amount) || 0;
     const kind = vishnuKindOf(e);
     let chipClass, chipLabel, effAmt;
     if(kind === 'house_for_vishnu'){
       chipClass = e.paidBy || 'irshad'; chipLabel = `Vishnu owes ${e.paidBy==='azad'?'Azad':'Irshad'}`; effAmt = amt;
     } else if(kind === 'vishnu_personal_for'){
-      chipClass = e.target || 'vishnu'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
+      chipClass = e.target || 'irshad'; chipLabel = `Vishnu paid for ${e.target==='azad'?'Azad':'Irshad'}`; effAmt = -amt;
     } else {
       chipClass = e.assignTo || 'irshad'; chipLabel = `${e.assignTo==='azad'?'Azad':'Irshad'} credited`; effAmt = -amt;
     }
-    return `
+    return { key:`tab:${e.id}`, source:'tab', id:e.id, chipClass, chipLabel, effAmt, description: e.description||'', date: e.date, badge:'' };
+  });
+
+  const splitEntries = liveExpenses.filter(e=> expenseSplitInfo(e).participants.includes('vishnu') && !e.vishnuShareSettled);
+  const splitItems = splitEntries.map(e=>{
+    const {splitAmounts, payer} = expenseSplitInfo(e);
+    const share = Number(splitAmounts.vishnu) || 0;
+    const cleanDesc = (e.description||'').replace('[Marked by Vishnu]','').trim();
+    return { key:`split:${e.id}`, source:'split', id:e.id, chipClass: payer || 'irshad', chipLabel:`Vishnu owes ${personLabel(payer)}`, effAmt: share, description: cleanDesc || '(shared mess expense)', date: e.date, badge:'Shared expense' };
+  });
+
+  return [...tabItems, ...splitItems].sort((a,b)=> a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+}
+
+function openVishnuSettleModal(){
+  const items = getVishnuSettleItems();
+  if(items.length===0){ showToast('Nothing to settle yet.'); return; }
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
+
+  const rows = items.map(it=> `
     <label class="vsettle-row">
-      <input type="checkbox" class="vsettle-check" value="${e.id}" data-amt="${effAmt}" checked onchange="updateVishnuSettleSummary()">
+      <input type="checkbox" class="vsettle-check" value="${it.key}" data-amt="${it.effAmt}" checked onchange="updateVishnuSettleSummary()">
       <div class="vsettle-row-body">
         <div class="entry-row-top" style="margin-bottom:2px;">
-          <span class="who-chip ${chipClass}"><span class="dot"></span>${chipLabel}</span>
-          <span class="entry-amount" style="color:${effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(effAmt)}</span>
+          <span class="who-chip ${it.chipClass}"><span class="dot"></span>${it.chipLabel}</span>
+          <span class="entry-amount" style="color:${it.effAmt < 0 ? 'var(--emerald-dark)' : 'inherit'};">${fmt(it.effAmt)}</span>
         </div>
-        <div class="entry-row-desc" style="font-size:12.5px;">${escapeHtml(e.description||'')} <span class="entry-date">· ${fmtDate(new Date(e.date))}</span></div>
+        <div class="entry-row-desc" style="font-size:12.5px;">${escapeHtml(it.description)} ${it.badge ? `<span class="tag-badge split">${it.badge}</span>` : ''} <span class="entry-date">· ${fmtDate(new Date(it.date))}</span></div>
       </div>
-    </label>`;
-  }).join('');
+    </label>`).join('');
 
   document.getElementById('vishnuSettleModalBody').innerHTML = `
     <div class="form-row" style="grid-template-columns:1fr 1fr;">
@@ -1868,7 +1887,7 @@ function openVishnuSettleModal(){
     <div style="margin-top:10px;margin-bottom:16px;"><label>Net Balance Due from Vishnu</label><div class="mono" style="font-size:20px;font-weight:700;">${fmt(netVishnuOwes)}</div></div>
 
     <div class="split-row-head">
-      <label style="margin:0;">Mark entries as received</label>
+      <label style="margin:0;">Mark transactions as received (${items.length})</label>
       <button type="button" class="split-toggle-link" onclick="toggleAllVishnuSettle()">Toggle all</button>
     </div>
     <div class="vsettle-list">${rows}</div>
@@ -1876,7 +1895,7 @@ function openVishnuSettleModal(){
       <span>Selected — will be marked received (nil)</span>
       <span class="entry-amount" id="vsettleSelectedTotal">${fmt(netVishnuOwes)}</span>
     </div>
-    <p style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 0;">Unchecked entries stay outstanding on Vishnu's tab. Checked entries are archived to History and their balance becomes nil.</p>
+    <p style="font-size:11.5px;color:var(--ink-soft);margin:10px 0 0;">Includes both his tab entries and his share of shared mess expenses. Unchecked items stay outstanding; checked items are archived to History and their balance becomes nil.</p>
   `;
   openModal('vishnuSettleModal');
 }
@@ -1897,25 +1916,19 @@ function updateVishnuSettleSummary(){
 
 async function confirmVishnuSettle(){
   const boxes = Array.from(document.querySelectorAll('.vsettle-check:checked'));
-  if(boxes.length===0){ showToast('Select at least one entry to mark as received.'); return; }
-  const selectedIds = boxes.map(b=> b.value);
-  const selectedEntries = liveVishnu.filter(e=> selectedIds.includes(e.id));
+  if(boxes.length===0){ showToast('Select at least one transaction to mark as received.'); return; }
+
+  const items = getVishnuSettleItems();
+  const selectedKeys = boxes.map(b=> b.value);
+  const selectedItems = items.filter(it=> selectedKeys.includes(it.key));
 
   let owedToIrshad = 0, owedToAzad = 0;
-  selectedEntries.forEach(e=>{
-    const amt = Number(e.amount) || 0;
-    const kind = vishnuKindOf(e);
-    if(kind === 'house_for_vishnu'){
-      if(e.paidBy==='azad') owedToAzad += amt; else owedToIrshad += amt;
-    } else if(kind === 'vishnu_personal_for'){
-      if(e.target==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
-    } else {
-      if(e.assignTo==='azad') owedToAzad -= amt; else owedToIrshad -= amt;
-    }
+  selectedItems.forEach(it=>{
+    if(it.chipClass==='azad') owedToAzad += it.effAmt; else owedToIrshad += it.effAmt;
   });
   const netTotal = owedToIrshad + owedToAzad;
 
-  const snapshotExpenses = selectedEntries.map(e=>({kind:vishnuKindOf(e), assignTo:e.assignTo, target:e.target, paidBy:e.paidBy, amount:e.amount, description:e.description, date:e.date}));
+  const snapshotExpenses = selectedItems.map(it=> ({source: it.source, description: it.description, amount: it.effAmt, date: it.date}));
   await db.collection('vishnuHistory').add({
     total: netTotal, owedToIrshad, owedToAzad,
     expenses: snapshotExpenses,
@@ -1923,14 +1936,20 @@ async function confirmVishnuSettle(){
   });
 
   const batch = db.batch();
-  selectedEntries.forEach(e=> batch.update(db.collection('vishnuExpenses').doc(e.id), {settled:true}));
+  selectedItems.forEach(it=>{
+    if(it.source==='tab'){
+      batch.update(db.collection('vishnuExpenses').doc(it.id), {settled:true});
+    } else {
+      batch.update(db.collection('expenses').doc(it.id), {vishnuShareSettled:true});
+    }
+  });
   await batch.commit();
 
   closeModal('vishnuSettleModal');
-  const remaining = liveVishnu.length - selectedEntries.length;
+  const remaining = items.length - selectedItems.length;
   showToast(remaining > 0
-    ? `${selectedEntries.length} entr${selectedEntries.length===1?'y':'ies'} marked received. ${remaining} still outstanding.`
-    : `All selected entries marked received — tab cleared.`);
+    ? `${selectedItems.length} transaction${selectedItems.length===1?'':'s'} marked received. ${remaining} still outstanding.`
+    : `All selected transactions marked received — tab cleared.`);
 }
 
 /* ---------------- History ---------------- */

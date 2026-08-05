@@ -805,11 +805,48 @@ function initEmailJS(){
   }
 }
 
+// Sends Vishnu a dedicated, Vishnu-only notification — never the mess
+// total/split/spend details (those aren't his business). Always just his
+// own current pending-owes summary plus a line about what triggered it.
+async function notifyVishnuSummary({subject, amount, description, actionLine, category}){
+  const cfg = getEmailConfig();
+  if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
+  if(!window.emailjs){ return; }
+
+  const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
+
+  const params = {
+    to_email: VISHNU_EMAIL,
+    to_name: 'Vishnu',
+    from_name: 'Mess Ledger',
+    subject,
+    paid_by: '',
+    entry_date: fmtDate(new Date()),
+    entry_time: '',
+    amount: amount != null ? fmt(amount) : '',
+    category: category || "Vishnu's Tab",
+    description: description || '',
+    split_summary: '',
+    cycle_total: '',
+    per_person_share: '',
+    irshad_spent: fmt(owedToIrshad),
+    azad_spent: fmt(owedToAzad),
+    balance_summary: `${actionLine ? actionLine + ' ' : ''}Your current pending total — Owed to Irshad: ${fmt(owedToIrshad)}, Owed to Azad: ${fmt(owedToAzad)}, Net: ${fmt(netVishnuOwes)}.`
+  };
+
+  try{
+    await emailjs.send(cfg.serviceId, cfg.templateId, params);
+  }catch(e){
+    console.error('EmailJS send failed (Vishnu summary)', e);
+  }
+}
+
 // Fires after a new expense is saved. Notifies whichever of Irshad/Azad
 // did NOT pay, with the entry details and a snapshot of the cycle so far.
 // Vishnu-paid entries aren't auto-mailed (no recipient rule defined for them).
 // If Vishnu is involved in the entry (split with him, or it's a synced
-// Vishnu-tab entry), he's CC'd on the notification too.
+// Vishnu-tab entry), he gets his OWN separate email — just his pending
+// totals, never the Irshad/Azad mess totals or split breakdown.
 async function notifyNewEntry(entry, opts){
   opts = opts || {};
   const cfg = getEmailConfig();
@@ -822,7 +859,6 @@ async function notifyNewEntry(entry, opts){
   else { return; } // paid by Vishnu — no auto-notify target
 
   const vishnuInvolved = opts.vishnuCC || (entry.splitWith && entry.splitWith.includes('vishnu'));
-  if(vishnuInvolved){ toEmail = `${toEmail},${VISHNU_EMAIL}`; toName = `${toName} & Vishnu`; }
 
   // Build a "cycle so far" snapshot including this brand-new entry, since the
   // live Firestore listener may not have refreshed liveExpenses yet.
@@ -864,6 +900,17 @@ async function notifyNewEntry(entry, opts){
     console.error('EmailJS send failed', e);
     showToast('Entry saved, but the notification email failed to send.');
   }
+
+  if(vishnuInvolved){
+    const share = (entry.splitAmounts && entry.splitAmounts.vishnu != null) ? Number(entry.splitAmounts.vishnu) : entry.amount;
+    notifyVishnuSummary({
+      subject: `Mess entry logged — your share ${fmt(share)}`,
+      amount: share,
+      description: entry.description || '(no description)',
+      actionLine: `Your share of this entry: ${fmt(share)}.`,
+      category: entry.category || 'Mess Expense'
+    });
+  }
 }
 
 // Fires after a new entry is saved on Vishnu's tab (house_for_vishnu or
@@ -895,10 +942,6 @@ async function notifyVishnuTabEntry(entry, kind){
     return;
   }
 
-  // Every entry on this tab is about Vishnu — always CC him.
-  toEmail = `${toEmail},${VISHNU_EMAIL}`;
-  toName = `${toName} & Vishnu`;
-
   const {netVishnuOwes, owedToIrshad, owedToAzad} = vishnuTotals();
 
   const params = {
@@ -926,6 +969,16 @@ async function notifyVishnuTabEntry(entry, kind){
     console.error('EmailJS send failed', e);
     showToast('Entry saved, but the notification email failed to send.');
   }
+
+  // Vishnu also gets his own dedicated email — same "this tab, this action"
+  // framing, but sent separately so it's clearly his message, not a CC.
+  notifyVishnuSummary({
+    subject,
+    amount: entry.amount,
+    description: entry.description || '(no description)',
+    actionLine,
+    category: "Vishnu's Tab"
+  });
 }
 
 /* ---------------- Vishnu entry -> notepad-style image -> WhatsApp share ---------------- */
@@ -1626,15 +1679,15 @@ async function confirmSettle(){
 
 // Fires after the main cycle is settled — notifies BOTH Irshad and Azad
 // (unlike per-entry notifications, which only tell the person who didn't pay).
-// If Vishnu had shared expenses in the settled cycle, he's CC'd too.
+// If Vishnu had shared expenses in the settled cycle, he gets his OWN
+// separate email with just his pending totals — never the mess total/split.
 async function notifySettlement(data){
   const cfg = getEmailConfig();
   if(!cfg || !cfg.enabled || !cfg.publicKey || !cfg.serviceId || !cfg.templateId){ return; }
   if(!window.emailjs){ return; }
 
-  let toEmail = `${IRSHAD_EMAIL},${AZAD_EMAIL}`;
-  let toName = 'Irshad & Azad';
-  if(data.vishnuInvolved){ toEmail += `,${VISHNU_EMAIL}`; toName += ' & Vishnu'; }
+  const toEmail = `${IRSHAD_EMAIL},${AZAD_EMAIL}`;
+  const toName = 'Irshad & Azad';
 
   const settleLine = data.txns.length
     ? data.txns.map(t=> `${personLabel(t.from)} pays ${personLabel(t.to)} ${fmt(t.amount)}`).join('; ')
@@ -1664,6 +1717,15 @@ async function notifySettlement(data){
   }catch(e){
     console.error('EmailJS send failed', e);
     showToast('Cycle settled, but the notification email failed to send.');
+  }
+
+  if(data.vishnuInvolved){
+    notifyVishnuSummary({
+      subject: `Mess cycle settled — your shared expenses this cycle`,
+      description: `The Irshad/Azad cycle has been settled and archived. A fresh cycle has started.`,
+      actionLine: `Your shared mess expenses from this cycle are now archived.`,
+      category: 'Cycle Settlement'
+    });
   }
 }
 

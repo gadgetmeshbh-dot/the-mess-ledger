@@ -617,11 +617,11 @@ tr:last-child td{border-bottom:none;}
 
       <div class="card">
         <div class="card-head"><h3>Monthly Total — Irshad vs Azad</h3></div>
-        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+        <div class="chart-wrap" id="chartMonthlyWrap"><canvas id="chartMonthly"></canvas></div>
       </div>
       <div class="card">
         <div class="card-head"><h3>Overall Trend</h3></div>
-        <div class="chart-wrap"><canvas id="chartTrend"></canvas></div>
+        <div class="chart-wrap" id="chartTrendWrap"><canvas id="chartTrend"></canvas></div>
       </div>
     </section>
 
@@ -861,8 +861,15 @@ async function notifyNewEntry(entry, opts){
   const vishnuInvolved = opts.vishnuCC || (entry.splitWith && entry.splitWith.includes('vishnu'));
 
   // Build a "cycle so far" snapshot including this brand-new entry, since the
-  // live Firestore listener may not have refreshed liveExpenses yet.
-  const listWithNew = [...liveExpenses, entry];
+  // live Firestore listener may not have refreshed liveExpenses yet. Guard
+  // against the listener having ALREADY caught up (Firestore's local-cache
+  // optimistic update can fire before this code runs) by checking the entry
+  // isn't already present — otherwise it would get counted twice.
+  const alreadyLive = liveExpenses.some(e=>
+    e.person===entry.person && Number(e.amount)===Number(entry.amount) &&
+    e.date===entry.date && e.time===entry.time && (e.description||'')===(entry.description||'')
+  );
+  const listWithNew = alreadyLive ? liveExpenses : [...liveExpenses, entry];
   const {messSpent, shareOwed} = computeNetBalances(listWithNew);
   const total = computeMessTotal(listWithNew);
   const irshadDiff = messSpent.irshad - (shareOwed.irshad||0);
@@ -1175,6 +1182,9 @@ function attachListeners(){
       snap.forEach(doc=> liveExpenses.push({id:doc.id, ...doc.data()}));
       liveExpenses.sort((a,b)=> entrySortKey(b).localeCompare(entrySortKey(a)));
       renderDashboard();
+      // Keep the "live" current-cycle bar/point on the Reports charts fresh
+      // as entries come in, without needing the cycle to be settled first.
+      renderCharts();
     }, err=>{ console.error(err); showToast('Sync error — check Firestore rules.'); });
 
   db.collection('vishnuExpenses').where('settled','==',false)
@@ -2548,19 +2558,61 @@ function downloadAdvReportPDF(){
 /* ---------------- Charts ---------------- */
 let chartMonthly, chartTrend;
 function renderCharts(){
+  const wrap1 = document.getElementById('chartMonthlyWrap');
+  const wrap2 = document.getElementById('chartTrendWrap');
   const sorted = [...cycleHistoryCache].sort((a,b)=> a.cycleKey.localeCompare(b.cycleKey));
-  const labels = sorted.map(c=> new Date(c.startDate).toLocaleDateString('en-GB',{month:'short',year:'2-digit'}));
-  const irshadData = sorted.map(c=>c.irshadTotal);
-  const azadData = sorted.map(c=>c.azadTotal);
-  const totalData = sorted.map(c=>c.totalExpense);
+
+  // Add the still-open current cycle as a live, provisional point — computed
+  // directly from liveExpenses — so the charts show this month right away
+  // instead of waiting for it to be settled. Skipped if this cycle key is
+  // already in cycleHistoryCache (i.e. it's already been settled).
+  const alreadySettled = sorted.some(c=> c.cycleKey === CURRENT_CYCLE);
+  let series = sorted;
+  if(!alreadySettled && liveExpenses.length){
+    const {messSpent} = computeNetBalances(liveExpenses);
+    const total = computeMessTotal(liveExpenses);
+    const {start} = cycleRangeFor(CURRENT_CYCLE);
+    series = [...sorted, {
+      cycleKey: CURRENT_CYCLE,
+      startDate: start.toISOString().slice(0,10),
+      irshadTotal: messSpent.irshad,
+      azadTotal: messSpent.azad,
+      totalExpense: total,
+      live: true
+    }];
+  }
+
+  // Nothing settled AND nothing logged this cycle yet — show a message
+  // instead of two blank axis grids, which is what "broken" charts looked like.
+  if(series.length===0){
+    if(chartMonthly){ chartMonthly.destroy(); chartMonthly=null; }
+    if(chartTrend){ chartTrend.destroy(); chartTrend=null; }
+    const emptyHtml = `<div class="empty-state"><span class="big">📊</span>No expenses logged yet. Charts fill in as you add entries.</div>`;
+    wrap1.innerHTML = emptyHtml;
+    wrap2.innerHTML = emptyHtml;
+    return;
+  }
+
+  // Restore the canvases if a prior render swapped them for the empty-state message.
+  if(!wrap1.querySelector('canvas')) wrap1.innerHTML = '<canvas id="chartMonthly"></canvas>';
+  if(!wrap2.querySelector('canvas')) wrap2.innerHTML = '<canvas id="chartTrend"></canvas>';
+
+  const labels = series.map(c=>{
+    const base = new Date(c.startDate).toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+    return c.live ? base + ' (live)' : base;
+  });
+  const irshadData = series.map(c=>c.irshadTotal);
+  const azadData = series.map(c=>c.azadTotal);
+  const totalData = series.map(c=>c.totalExpense);
+  const lastIsLive = series[series.length-1].live === true;
 
   const ctx1 = document.getElementById('chartMonthly').getContext('2d');
   if(chartMonthly) chartMonthly.destroy();
   chartMonthly = new Chart(ctx1, {
     type:'bar',
     data:{ labels, datasets:[
-      {label:'Irshad', data:irshadData, backgroundColor:'#1F6F54', borderRadius:4, maxBarThickness:26},
-      {label:'Azad', data:azadData, backgroundColor:'#2C5F8A', borderRadius:4, maxBarThickness:26}
+      {label:'Irshad', data:irshadData, backgroundColor:series.map(c=> c.live ? 'rgba(31,111,84,0.45)' : '#1F6F54'), borderRadius:4, maxBarThickness:26},
+      {label:'Azad', data:azadData, backgroundColor:series.map(c=> c.live ? 'rgba(44,95,138,0.45)' : '#2C5F8A'), borderRadius:4, maxBarThickness:26}
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{legend:{position:'bottom', labels:{font:{family:'Inter'}}}},
@@ -2573,7 +2625,11 @@ function renderCharts(){
   chartTrend = new Chart(ctx2, {
     type:'line',
     data:{ labels, datasets:[
-      {label:'Total Cycle Expense', data:totalData, borderColor:'#B4842A', backgroundColor:'rgba(180,132,42,0.12)', fill:true, tension:.3, pointRadius:4, pointBackgroundColor:'#B4842A'}
+      {label:'Total Cycle Expense', data:totalData, borderColor:'#B4842A', backgroundColor:'rgba(180,132,42,0.12)', fill:true, tension:.3,
+        pointRadius:4,
+        pointBackgroundColor: series.map(c=> c.live ? '#D8B26A' : '#B4842A'),
+        segment:{ borderDash: ctx => (lastIsLive && ctx.p1DataIndex === series.length-1) ? [6,4] : undefined }
+      }
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{legend:{display:false}},
